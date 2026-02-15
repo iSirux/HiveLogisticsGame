@@ -60,25 +60,9 @@ export class Renderer {
     renderEntities(ctx, world.bees, camera, tickAlpha);
   }
 
-  private getBackgroundColor(dayProgress: number): string {
-    // Lerp from warm gold (day) to cool blue (night)
-    // Day: 0.05 - 0.7, Night: 0.7 - 1.0, Dawn: 0.0 - 0.05
-    let t: number; // 0=day, 1=night
-    if (dayProgress < 0.05) {
-      t = 1 - dayProgress / 0.05; // dawn: fading from night
-    } else if (dayProgress < 0.65) {
-      t = 0; // full day
-    } else if (dayProgress < 0.7) {
-      t = (dayProgress - 0.65) / 0.05; // dusk: fading to night
-    } else {
-      t = 1; // night
-    }
-
-    // Day: #87CEEB (sky blue), Night: #1a1a3e (dark blue)
-    const r = Math.round(135 + (26 - 135) * t);
-    const g = Math.round(206 + (26 - 206) * t);
-    const b = Math.round(235 + (62 - 235) * t);
-    return `rgb(${r},${g},${b})`;
+  private getBackgroundColor(_dayProgress: number): string {
+    // Match unexplored/fog color so edges blend seamlessly
+    return '#15152a';
   }
 
   getValidBuildHexes(world: World): Set<string> {
@@ -107,7 +91,7 @@ export class Renderer {
     }
 
     // Honey/pollen storage can also be built adjacent to waystations
-    if (world.inputState.buildType === 'honey_storage' || world.inputState.buildType === 'pollen_storage') {
+    if (world.inputState.buildType === 'honey_storage' || world.inputState.buildType === 'pollen_storage' || world.inputState.buildType === 'nectar_storage') {
       const waystations = world.grid.waystationCells();
       for (const ws of waystations) {
         const neighbors = hexNeighbors(ws.q, ws.r);

@@ -9,12 +9,14 @@ Hive Logistics is a browser-based logistics game where you guide a bee colony on
 ## Commands
 
 ```bash
-npm run dev       # Start Vite dev server with HMR
-npm run build     # TypeScript compile + Vite production build
-npm run preview   # Preview production build locally
+npm run dev        # Start Vite dev server with HMR
+npm run build      # TypeScript compile + Vite production build
+npm run preview    # Preview production build locally
+npm test           # Run tests once (vitest run)
+npm run test:watch # Run tests in watch mode (vitest)
 ```
 
-No test framework, linter, or formatter is configured.
+Vitest is configured for testing. No linter or formatter is configured.
 
 ## Architecture
 

@@ -22,29 +22,29 @@ export function idleBees(world: World): BeeEntity[] {
   return world.bees.filter(b => b.state === BeeState.Idle || b.state === BeeState.IdleAtHive);
 }
 
-export function assignRoleFromRatios(world: World, bee: BeeEntity): void {
+export function assignRoleFromCounts(world: World, bee: BeeEntity): void {
   const total = world.bees.length;
   if (total === 0) return;
 
-  const foragerTarget = Math.max(1, Math.round(world.settings.foragerRatio * total));
-  const nurseTarget = Math.max(1, Math.round(world.settings.nurseRatio * total));
-  const scoutTarget = Math.max(1, Math.round(world.settings.scoutRatio * total));
-  const haulerTarget = Math.max(1, Math.round(world.settings.haulerRatio * total));
+  const nurseTarget = Math.max(1, world.settings.nurseCount);
+  const scoutTarget = Math.max(1, world.settings.scoutCount);
+  const haulerTarget = world.settings.haulerCount;
+  const builderTarget = Math.max(1, world.settings.builderCount);
 
-  const currentForagers = world.bees.filter(b => b.role === BeeRole.Forager).length;
   const currentNurses = world.bees.filter(b => b.role === BeeRole.Nurse).length;
   const currentScouts = world.bees.filter(b => b.role === BeeRole.Scout).length;
   const currentHaulers = world.bees.filter(b => b.role === BeeRole.Hauler).length;
+  const currentBuilders = world.bees.filter(b => b.role === BeeRole.Builder).length;
 
-  if (currentForagers < foragerTarget) {
-    bee.role = BeeRole.Forager;
-  } else if (currentNurses < nurseTarget) {
+  if (currentNurses < nurseTarget) {
     bee.role = BeeRole.Nurse;
   } else if (currentScouts < scoutTarget) {
     bee.role = BeeRole.Scout;
   } else if (currentHaulers < haulerTarget) {
     bee.role = BeeRole.Hauler;
-  } else {
+  } else if (currentBuilders < builderTarget) {
     bee.role = BeeRole.Builder;
+  } else {
+    bee.role = BeeRole.Forager;
   }
 }

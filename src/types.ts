@@ -4,6 +4,18 @@ export interface AxialCoord {
   r: number;
 }
 
+// === Flower Types ===
+export enum FlowerType {
+  Clover = 'clover',
+  Wildflower = 'wildflower',
+  Sunflower = 'sunflower',
+  Bluebell = 'bluebell',
+  Honeysuckle = 'honeysuckle',
+}
+
+// === Biomes ===
+export type Biome = 'meadow' | 'forest' | 'wetland' | 'wilds';
+
 // === Terrain / Cell Types ===
 export enum TerrainType {
   Grass = 'grass',
@@ -17,6 +29,8 @@ export enum TerrainType {
   Brood = 'brood',
   Empty = 'empty',
   Waystation = 'waystation',
+  WaxWorks = 'wax_works',
+  NectarStorage = 'nectar_storage',
 }
 
 export interface HexCell {
@@ -29,6 +43,7 @@ export interface HexCell {
   pollenAmount: number;    // 0-1 current pollen
   pollenMax: number;       // max pollen capacity
   flowerColor: string;     // petal color
+  flowerType: FlowerType;  // species (only meaningful for Flower terrain)
   // Tree fields
   resinAmount: number;
   resinMax: number;
@@ -39,8 +54,8 @@ export interface HexCell {
   processingProgress: number; // 0-1
   broodProgress: number;     // 0-1, hatches at 1
   broodActive: boolean;
-  // Pheromone
-  pheromone: number;       // 0-1
+  // Biome
+  biome: Biome;
   // Fog of war
   explored: boolean;
 }
@@ -74,6 +89,9 @@ export enum BeeState {
   // Hauler states
   FlyingToWaystation = 'flying_to_waystation',
   PickingUp = 'picking_up',
+  // Builder wax works states
+  FlyingToWaxWorks = 'flying_to_wax_works',
+  ProducingWax = 'producing_wax',
   // Scout states
   FlyingToExplore = 'flying_to_explore',
   Exploring = 'exploring',
@@ -118,10 +136,9 @@ export interface BeeEntity {
 export enum InputMode {
   Select = 'select',
   Build = 'build',
-  Pheromone = 'pheromone',
 }
 
-export type BuildType = 'honey_storage' | 'processing' | 'brood' | 'pollen_storage' | 'waystation';
+export type BuildType = 'honey_storage' | 'processing' | 'brood' | 'pollen_storage' | 'waystation' | 'wax_works' | 'nectar_storage';
 
 export interface InputState {
   mode: InputMode;
@@ -145,11 +162,11 @@ export interface Resources {
 
 // === World Settings ===
 export interface WorldSettings {
-  foragerRatio: number;  // 0-1
-  nurseRatio: number;    // 0-1
-  scoutRatio: number;    // 0-1
-  haulerRatio: number;   // 0-1
-  // builder = 1 - forager - nurse - scout - hauler
+  nurseCount: number;    // flat count (min 1 enforced at reassignment)
+  scoutCount: number;    // flat count (min 1 enforced at reassignment)
+  haulerCount: number;   // flat count (min 0)
+  builderCount: number;  // flat count (min 1 enforced at reassignment)
+  // forager = all remaining bees
   speedMultiplier: number; // 0, 1, 2, 3
   paused: boolean;
 }

@@ -78,15 +78,35 @@ Infinite hex grid generated procedurally in chunks. The hive starts at the cente
 | **Rock**    | Impassable obstacle                                  |
 | **Danger**  | Pesticide zones — high yield but damages bees        |
 
-### Biome Rings
+### Biomes
 
-Terrain shifts as distance from hive increases:
+Terrain determined by multi-octave noise with organic shapes. The starting meadow (radius ~12, noisy edge) is always safe.
 
-1. **Meadow** (near) — abundant flowers, safe, moderate yield
-2. **Garden** — cultivated flowers, high yield, some pesticide risk
-3. **Forest** — resin-rich, less nectar, predator habitat
-4. **Wetland** — water-abundant, unique flowers, flood risk
-5. **Urban fringe** — sparse resources, high danger, rare finds
+| Biome      | Ground               | Features                          |
+| ---------- | -------------------- | --------------------------------- |
+| **Meadow** | Bright green, tufts  | Abundant flowers, safe, moderate yield |
+| **Forest** | Dark earthy, leaf litter | Trees, resin, bluebells, honeysuckle at edge |
+| **Wetland**| Teal-green, reeds    | Water ponds, sparse flowers       |
+| **Wilds**  | Dusty olive, rocks   | Sparse trees/flowers, rare ponds  |
+
+### Flower Types
+
+Five species with distinct gameplay profiles, creating meaningful foraging decisions. Flowers never spawn adjacent (min distance 2). Clusters scatter within radius 3 of a center point.
+
+| Flower | Biome | Nectar | Pollen | Cluster | Regrowth | Harvest | Visual |
+|--------|-------|--------|--------|---------|----------|---------|--------|
+| **Clover** | Meadow (50%) | 0.4–0.7 (med) | 0.1–0.3 (low) | 5–7 | Fast (1/700) | 50 ticks | Cream-white, 3 round petals, green center |
+| **Wildflower** | Meadow (30%), Forest (30%), Wetland/Wilds | 0.2–0.5 (low) | 0.6–1.0 (high) | 3–5 | Medium (1/1000) | 55 ticks | Violet-purple, 5 petals, gold center |
+| **Sunflower** | Meadow (20%) | 0.8–1.2 (high) | 0.6–1.0 (high) | 1–2 | Slow (1/2000) | 65 ticks | Warm yellow, 10 petals, dark brown disk |
+| **Bluebell** | Forest (70%) | 0.4–0.8 (med) | 0.1–0.3 (low) | 6–7 | Medium (1/1000) | 55 ticks | Violet-blue, 3 drooping bells, green stem |
+| **Honeysuckle** | Forest edge only | 1.0–1.5 (v.high) | None | 1 | Very slow (1/2500) | 70 ticks | Cream-yellow, 3 trumpet curves, no pollen dots |
+
+**Design intent:**
+- **Clover** — reliable bread-and-butter, fast regrowth, large patches. Early-game staple.
+- **Wildflower** — pollen-heavy. Essential for bee bread → brood production. Moderate clusters.
+- **Sunflower** — high-value nectar + pollen jackpot but rare (1–2 per cluster) and slow to regrow. Worth a pheromone trail.
+- **Bluebell** — forest equivalent of clover. Large clusters reward forest expansion with steady income.
+- **Honeysuckle** — rare singles at the forest edge. Massive nectar, zero pollen. Rewards scouting and waystation placement.
 
 ### Fog of War
 

@@ -38,10 +38,33 @@ export class Camera {
     };
   }
 
+  // World bounds for capping camera position
+  boundsMinX = -Infinity;
+  boundsMaxX = Infinity;
+  boundsMinY = -Infinity;
+  boundsMaxY = Infinity;
+
+  /** Update camera bounds from world */
+  updateBounds(minX: number, maxX: number, minY: number, maxY: number) {
+    this.boundsMinX = minX;
+    this.boundsMaxX = maxX;
+    this.boundsMinY = minY;
+    this.boundsMaxY = maxY;
+  }
+
+  /** Clamp camera position to world bounds */
+  clampToBounds() {
+    if (this.boundsMinX !== -Infinity) {
+      this.x = Math.max(this.boundsMinX, Math.min(this.boundsMaxX, this.x));
+      this.y = Math.max(this.boundsMinY, Math.min(this.boundsMaxY, this.y));
+    }
+  }
+
   /** Pan by screen-space delta */
   pan(dx: number, dy: number) {
     this.x -= dx / this.zoom;
     this.y -= dy / this.zoom;
+    this.clampToBounds();
   }
 
   /** Zoom at a screen-space point */

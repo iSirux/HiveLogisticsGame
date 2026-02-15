@@ -2,7 +2,7 @@ import { Camera } from '../rendering/camera';
 import { pixelToHex } from '../hex/hex';
 import { World } from '../world/world';
 import { InputMode, TerrainType, BuildType } from '../types';
-import { BUILD_COSTS, PHEROMONE_PAINT_AMOUNT, PHEROMONE_MAX, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX } from '../constants';
+import { BUILD_COSTS, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX, CAMERA_PAN_SPEED } from '../constants';
 import { hexKey } from '../hex/hex';
 
 export class InputHandler {
@@ -12,6 +12,9 @@ export class InputHandler {
   private getValidBuildHexes!: () => Set<string>;
   private onFirstClick: (() => void) | null = null;
   private firstClickFired = false;
+
+  // Keyboard pan state
+  private heldKeys = new Set<string>();
 
   // Touch state
   private activeTouches = new Map<number, { x: number; y: number }>();
@@ -24,6 +27,25 @@ export class InputHandler {
     this.camera = camera;
     this.canvas = canvas;
     this.bindEvents();
+  }
+
+  /** Call each frame with real dt in seconds to apply smooth keyboard panning */
+  update(dtSeconds: number): void {
+    const speed = CAMERA_PAN_SPEED * dtSeconds;
+    let dx = 0;
+    let dy = 0;
+    for (const key of this.heldKeys) {
+      switch (key) {
+        case 'ArrowLeft': case 'a': case 'A': dx -= speed; break;
+        case 'ArrowRight': case 'd': case 'D': dx += speed; break;
+        case 'ArrowUp': case 'w': case 'W': dy -= speed; break;
+        case 'ArrowDown': case 's': case 'S': dy += speed; break;
+      }
+    }
+    if (dx !== 0 || dy !== 0) {
+      this.camera.x += dx;
+      this.camera.y += dy;
+    }
   }
 
   setWorld(world: World) {
@@ -53,6 +75,8 @@ export class InputHandler {
     c.addEventListener('mouseleave', () => this.onMouseLeave());
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
+    window.addEventListener('keyup', (e) => this.heldKeys.delete(e.key));
+    window.addEventListener('blur', () => this.heldKeys.clear());
 
     // Touch events
     c.addEventListener('touchstart', (e) => this.onTouchStart(e), { passive: false });
@@ -86,10 +110,6 @@ export class InputHandler {
       input.hoveredHex = null;
     }
 
-    // Pheromone drag-painting
-    if (input.isDragging && input.mode === InputMode.Pheromone && input.hoveredHex) {
-      this.paintPheromone(input.hoveredHex.q, input.hoveredHex.r);
-    }
   }
 
   private onMouseDown(e: MouseEvent) {
@@ -123,8 +143,6 @@ export class InputHandler {
         }
       } else if (input.mode === InputMode.Build) {
         this.tryBuild(hovered.q, hovered.r);
-      } else if (input.mode === InputMode.Pheromone) {
-        this.paintPheromone(hovered.q, hovered.r);
       }
     }
   }
@@ -166,10 +184,6 @@ export class InputHandler {
       case 'B':
         this.setMode(InputMode.Build);
         break;
-      case 'p':
-      case 'P':
-        this.setMode(InputMode.Pheromone);
-        break;
       case ' ':
         e.preventDefault();
         this.togglePause();
@@ -182,6 +196,17 @@ export class InputHandler {
         break;
       case '3':
         this.setSpeed(3);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowRight':
+      case 'ArrowUp':
+      case 'ArrowDown':
+      case 'w': case 'W':
+      case 'a': case 'A':
+      case 's': case 'S':
+      case 'd': case 'D':
+        e.preventDefault();
+        this.heldKeys.add(e.key);
         break;
     }
   }
@@ -238,6 +263,8 @@ export class InputHandler {
       processing: TerrainType.Processing,
       brood: TerrainType.Brood,
       waystation: TerrainType.Waystation,
+      wax_works: TerrainType.WaxWorks,
+      nectar_storage: TerrainType.NectarStorage,
     };
     cell.terrain = terrainMap[buildType];
     cell.honeyStored = 0;
@@ -323,7 +350,6 @@ export class InputHandler {
     e.preventDefault();
     if (!this.world) return;
     const dpr = this.getDpr();
-    const input = this.world.inputState;
 
     // Save previous positions for delta calculation
     const prevPositions = new Map<number, { x: number; y: number }>();
@@ -356,21 +382,10 @@ export class InputHandler {
       const pos = this.activeTouches.get(id)!;
       const prev = prevPositions.get(id);
       if (prev) {
-        if (input.mode === InputMode.Pheromone) {
-          // Paint pheromones while dragging
-          const sx = pos.x * dpr;
-          const sy = pos.y * dpr;
-          const wp = this.camera.screenToWorld(sx, sy);
-          const hex = pixelToHex(wp.x, wp.y);
-          if (this.world.grid.has(hex.q, hex.r)) {
-            this.paintPheromone(hex.q, hex.r);
-          }
-        } else {
-          // Pan camera
-          const dx = (pos.x - prev.x) * dpr;
-          const dy = (pos.y - prev.y) * dpr;
-          this.camera.pan(dx, dy);
-        }
+        // Pan camera
+        const dx = (pos.x - prev.x) * dpr;
+        const dy = (pos.y - prev.y) * dpr;
+        this.camera.pan(dx, dy);
       }
     } else if (this.activeTouches.size === 2) {
       // Two-finger pinch + pan
@@ -434,8 +449,6 @@ export class InputHandler {
           }
         } else if (input.mode === InputMode.Build) {
           this.tryBuild(hex.q, hex.r);
-        } else if (input.mode === InputMode.Pheromone) {
-          this.paintPheromone(hex.q, hex.r);
         }
       } else {
         // Tap empty area = deselect
@@ -449,9 +462,4 @@ export class InputHandler {
     }
   }
 
-  private paintPheromone(q: number, r: number) {
-    const cell = this.world.grid.get(q, r);
-    if (!cell) return;
-    cell.pheromone = Math.min(PHEROMONE_MAX, cell.pheromone + PHEROMONE_PAINT_AMOUNT);
-  }
 }

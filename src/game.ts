@@ -7,7 +7,6 @@ import { AudioManager } from './audio/audioManager';
 import { updateMovement } from './systems/movementSystem';
 import { updateForaging } from './systems/foragingSystem';
 import { updateHive } from './systems/hiveSystem';
-import { updatePheromones } from './systems/pheromoneSystem';
 import { updateDayNight } from './systems/dayNightSystem';
 import { updateExploration } from './systems/explorationSystem';
 import { updateLifecycle } from './systems/lifecycleSystem';
@@ -48,7 +47,8 @@ export class Game {
     // Load latest save or generate fresh world
     const latestSave = getLatestSave();
     if (latestSave) {
-      restoreWorld(this.world, latestSave);
+      restoreWorld(this.world, latestSave, this.renderer.camera);
+      this.uiManager.syncFromWorld();
     } else {
       generateWorld(this.world);
     }
@@ -99,6 +99,23 @@ export class Game {
       this.tick();
     }
 
+    // Keyboard camera pan
+    this.inputHandler.update(dt / 1000);
+
+    // Update camera bounds from world (unbound when fog is disabled)
+    const cam = this.renderer.camera;
+    if (this.world.debugFogDisabled) {
+      cam.updateBounds(-Infinity, Infinity, -Infinity, Infinity);
+    } else {
+      cam.updateBounds(
+        this.world.worldBoundsMinX,
+        this.world.worldBoundsMaxX,
+        this.world.worldBoundsMinY,
+        this.world.worldBoundsMaxY,
+      );
+      cam.clampToBounds();
+    }
+
     // Render with interpolation alpha
     const tickAlpha = this.accumulator / SIM_TICK_MS;
     this.renderer.render(this.world, tickAlpha);
@@ -108,10 +125,6 @@ export class Game {
     this.uiManager.update();
 
     // Audio
-    const visibleBees = this.world.bees.filter(b =>
-      this.renderer.camera.isVisible(b.pixelX, b.pixelY)
-    ).length;
-    this.audioManager.updateBuzz(visibleBees);
     this.audioManager.processEvents(this.world);
 
     requestAnimationFrame((t) => this.loop(t));
@@ -125,20 +138,19 @@ export class Game {
     updateLifecycle(this.world);
     updateMovement(this.world);
     updateHive(this.world);
-    updatePheromones(this.world);
     updateDayNight(this.world);
     updateExploration(this.world);
 
     // Autosave every 300 ticks (~30s at 1x)
     if (this.world.tickCount % 300 === 0) {
-      saveToSlot(this.world, 'autosave');
+      saveToSlot(this.world, 'autosave', this.renderer.camera);
       this.showSaveIndicator();
     }
   }
 
   /** Save to a named slot */
   save(slotName = 'manual'): void {
-    saveToSlot(this.world, slotName);
+    saveToSlot(this.world, slotName, this.renderer.camera);
     this.showSaveIndicator();
   }
 

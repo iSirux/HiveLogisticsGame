@@ -78,6 +78,13 @@
       border-radius: 3px;
       display: inline-block;
     }
+    .res-delta {
+      font-size: 10px;
+      opacity: 0.7;
+    }
+    .res-delta.positive { color: #80e060; }
+    .res-delta.negative { color: #e06060; }
+    .res-delta.zero { color: #a0a0a0; }
 
     /* Time display */
     #time-display {
@@ -209,7 +216,8 @@
     .role-row {
       margin-bottom: 8px;
     }
-    .role-row label {
+    .role-row label,
+    .role-row .role-label {
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -219,9 +227,42 @@
       color: rgba(220, 180, 90, 0.85);
       margin-top: 1px;
     }
-    #role-panel input[type="range"] {
-      width: 90px;
-      accent-color: #c8a03c;
+    .role-stepper {
+      display: flex;
+      align-items: center;
+      gap: 0;
+    }
+    .role-stepper .role-minus,
+    .role-stepper .role-plus {
+      background: rgba(200, 160, 60, 0.25);
+      border: 1px solid rgba(200, 160, 60, 0.4);
+      color: #f0e6d3;
+      width: 22px;
+      height: 22px;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .role-stepper .role-minus { border-radius: 3px 0 0 3px; }
+    .role-stepper .role-plus  { border-radius: 0 3px 3px 0; }
+    .role-stepper .role-minus:hover:not(:disabled),
+    .role-stepper .role-plus:hover:not(:disabled) { background: rgba(200, 160, 60, 0.45); }
+    .role-stepper .role-minus:disabled,
+    .role-stepper .role-plus:disabled { opacity: 0.3; cursor: default; }
+    .role-stepper .role-count {
+      background: rgba(200, 160, 60, 0.1);
+      border-top: 1px solid rgba(200, 160, 60, 0.4);
+      border-bottom: 1px solid rgba(200, 160, 60, 0.4);
+      color: #f0e6d3;
+      width: 28px;
+      height: 22px;
+      font-size: 13px;
+      text-align: center;
+      line-height: 22px;
     }
     .role-value { min-width: 32px; text-align: right; }
 
@@ -230,8 +271,7 @@
     #left-panels {
       position: absolute;
       left: 0;
-      top: 50%;
-      transform: translateY(-50%);
+      top: 42px;
       z-index: 15;
       pointer-events: auto;
       display: flex;
@@ -608,8 +648,15 @@
         padding: 10px 14px;
         overflow-y: auto;
       }
-      #role-panel input[type="range"] {
-        touch-action: auto;
+      .role-stepper button {
+        min-height: 32px;
+        min-width: 32px;
+        touch-action: manipulation;
+      }
+      .role-stepper .role-count {
+        min-height: 32px;
+        line-height: 32px;
+        width: 36px;
       }
 
       /* Role toggle: show on mobile */
@@ -663,7 +710,7 @@
       <!-- Left Panel Stack (Debug + Bees) -->
       <div id="left-panels">
       <!-- Debug Panel -->
-      <div id="debug-panel">
+      <div id="debug-panel" class="debug-open">
         <div id="debug-tab">Debug</div>
         <div id="debug-content">
           <button id="debug-close">&times;</button>
@@ -673,28 +720,6 @@
             <div class="debug-row"><span class="debug-lbl">Day</span><span class="debug-val" id="dbg-day">1</span></div>
             <div class="debug-row"><span class="debug-lbl">Day Progress</span><span class="debug-val" id="dbg-day-pct">0%</span></div>
             <div class="debug-row"><span class="debug-lbl">FPS</span><span class="debug-val" id="dbg-fps">0</span></div>
-          </div>
-          <div class="debug-section">
-            <div class="debug-section-title">Bees</div>
-            <div class="debug-row"><span class="debug-lbl">Forager</span><span class="debug-val" id="dbg-foragers">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Nurse</span><span class="debug-val" id="dbg-nurses">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Scout</span><span class="debug-val" id="dbg-scouts">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Builder</span><span class="debug-val" id="dbg-builders">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Hauler</span><span class="debug-val" id="dbg-haulers">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Total</span><span class="debug-val" id="dbg-total-bees">0</span></div>
-          </div>
-          <div class="debug-section">
-            <div class="debug-section-title">Flowers</div>
-            <div class="debug-row"><span class="debug-lbl">Total</span><span class="debug-val" id="dbg-flowers-total">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">With Nectar</span><span class="debug-val" id="dbg-flowers-nectar">0</span></div>
-          </div>
-          <div class="debug-section">
-            <div class="debug-section-title">Resources</div>
-            <div class="debug-row"><span class="debug-lbl">Honey</span><span class="debug-val" id="dbg-honey">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Nectar</span><span class="debug-val" id="dbg-nectar">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Pollen</span><span class="debug-val" id="dbg-pollen">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Bee Bread</span><span class="debug-val" id="dbg-beebread">0</span></div>
-            <div class="debug-row"><span class="debug-lbl">Wax</span><span class="debug-val" id="dbg-wax">0</span></div>
           </div>
           <div class="debug-section">
             <div class="debug-section-title">Toggles &amp; Actions</div>
@@ -719,11 +744,17 @@
               <button class="debug-btn" id="dbg-new-game">New Game</button>
             </div>
           </div>
+          <div class="debug-section">
+            <div class="debug-section-title">Data</div>
+            <div>
+              <button class="debug-btn" id="dbg-copy-flowers">Copy Flowers</button>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Bees Panel -->
-      <div id="bees-panel">
+      <div id="bees-panel" class="bees-open">
         <div id="bees-tab">Bees</div>
         <div id="bees-content">
           <button id="bees-close">&times;</button>
@@ -762,26 +793,27 @@
         <div class="resource-item" data-tip="Processed from nectar. Feeds brood and fuels building.">
           <span class="resource-icon" style="background:#f0c040;"></span>
           <span>Honey: <span id="res-honey">0</span></span>
+          <span class="res-delta" id="res-delta-honey"></span>
         </div>
         <div class="resource-item" data-tip="Collected from flowers by foragers. Processed into honey.">
           <span class="resource-icon" style="background:#80d040;"></span>
           <span>Nectar: <span id="res-nectar">0</span></span>
+          <span class="res-delta" id="res-delta-nectar"></span>
         </div>
         <div class="resource-item" data-tip="Gathered from flowers. Combined with honey to make bee bread.">
           <span class="resource-icon" style="background:#e0c020;"></span>
           <span>Pollen: <span id="res-pollen">0</span></span>
+          <span class="res-delta" id="res-delta-pollen"></span>
         </div>
         <div class="resource-item" data-tip="Made from pollen + honey. Required to start brood cycles.">
           <span class="resource-icon" style="background:#c8a040;"></span>
           <span>Bee Bread: <span id="res-beebread">0</span></span>
+          <span class="res-delta" id="res-delta-beebread"></span>
         </div>
         <div class="resource-item" data-tip="Produced passively by the hive. Used to build new cells.">
           <span class="resource-icon" style="background:#e8d8a0;"></span>
           <span>Wax: <span id="res-wax">0</span></span>
-        </div>
-        <div class="resource-item" data-tip="Your colony population. Roles shown as Forager/Nurse/Scout/Builder.">
-          <span class="resource-icon" style="background:#e8a020;"></span>
-          <span>Bees: <span id="res-bees">0</span></span>
+          <span class="res-delta" id="res-delta-wax"></span>
         </div>
       </div>
 
@@ -795,45 +827,57 @@
 
       <!-- Role Panel -->
       <div id="role-panel">
-        <div style="margin-bottom:8px; font-weight:bold;">Roles</div>
+        <div style="margin-bottom:8px; font-weight:bold;" id="res-bees">Bees: 0</div>
         <div class="role-row">
-          <label>
-            Forager
-            <input type="range" id="slider-forager" min="0" max="100" value="55" />
-            <span class="role-value" id="val-forager">55%</span>
-          </label>
-          <div class="role-desc">Gather nectar &amp; pollen</div>
-        </div>
-        <div class="role-row">
-          <label>
+          <span class="role-label">
             Nurse
-            <input type="range" id="slider-nurse" min="0" max="100" value="25" />
-            <span class="role-value" id="val-nurse">25%</span>
-          </label>
+            <div class="role-stepper">
+              <button class="role-minus" data-role="nurse">&minus;</button>
+              <span class="role-count" id="count-nurse">1</span>
+              <button class="role-plus" data-role="nurse">+</button>
+            </div>
+          </span>
           <div class="role-desc">Process nectar &amp; tend brood</div>
         </div>
         <div class="role-row">
-          <label>
+          <span class="role-label">
             Scout
-            <input type="range" id="slider-scout" min="0" max="100" value="10" />
-            <span class="role-value" id="val-scout">10%</span>
-          </label>
+            <div class="role-stepper">
+              <button class="role-minus" data-role="scout">&minus;</button>
+              <span class="role-count" id="count-scout">1</span>
+              <button class="role-plus" data-role="scout">+</button>
+            </div>
+          </span>
           <div class="role-desc">Explore &amp; reveal terrain</div>
         </div>
         <div class="role-row">
-          <label>
+          <span class="role-label">
             Hauler
-            <input type="range" id="slider-hauler" min="0" max="100" value="0" />
-            <span class="role-value" id="val-hauler">0%</span>
-          </label>
+            <div class="role-stepper">
+              <button class="role-minus" data-role="hauler">&minus;</button>
+              <span class="role-count" id="count-hauler">0</span>
+              <button class="role-plus" data-role="hauler">+</button>
+            </div>
+          </span>
           <div class="role-desc">Transport from waystations</div>
         </div>
         <div class="role-row">
-          <label>
+          <span class="role-label">
             Builder
-            <span class="role-value" id="val-builder">10%</span>
-          </label>
+            <div class="role-stepper">
+              <button class="role-minus" data-role="builder">&minus;</button>
+              <span class="role-count" id="count-builder">1</span>
+              <button class="role-plus" data-role="builder">+</button>
+            </div>
+          </span>
           <div class="role-desc">Construct new cells</div>
+        </div>
+        <div class="role-row">
+          <label>
+            Forager
+            <span class="role-value" id="val-forager">--</span>
+          </label>
+          <div class="role-desc">Gather nectar &amp; pollen (all remaining)</div>
         </div>
       </div>
 
@@ -848,7 +892,6 @@
       <div id="mode-toolbar">
         <button class="mode-btn active" data-mode="select">Select (Esc)</button>
         <button class="mode-btn" data-mode="build">Build (B)</button>
-        <button class="mode-btn" data-mode="pheromone">Pheromone (P)</button>
         <button id="role-toggle">Roles</button>
       </div>
 
@@ -868,6 +911,12 @@
         </button>
         <button class="build-btn" data-build="waystation">
           Waystation<br/><span class="cost">6 wax</span>
+        </button>
+        <button class="build-btn" data-build="nectar_storage">
+          Nectar Storage<br/><span class="cost">8 wax</span>
+        </button>
+        <button class="build-btn" data-build="wax_works">
+          Wax Works<br/><span class="cost">3 honey</span>
         </button>
       </div>
 

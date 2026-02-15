@@ -7,10 +7,10 @@ export class World {
   nextEntityId = 1;
   resources: Resources = { honey: 0, nectar: 0, wax: 10, pollen: 0, beeBread: 0 };
   settings: WorldSettings = {
-    foragerRatio: 0.55,
-    nurseRatio: 0.25,
-    scoutRatio: 0.1,
-    haulerRatio: 0,
+    nurseCount: 1,
+    scoutCount: 1,
+    haulerCount: 0,
+    builderCount: 1,
     speedMultiplier: 1,
     paused: false,
   };
@@ -34,11 +34,25 @@ export class World {
   terrainVersion = 0;
   explorationVersion = 0;
 
+  // Procedural generation
+  worldSeed: number = Math.floor(Math.random() * 0x7FFFFFFF);
+  loadedChunks: Set<string> = new Set();
+
+  // World bounds (pixel coords of explored area, updated when chunks generate)
+  worldBoundsMinX = -200;
+  worldBoundsMaxX = 200;
+  worldBoundsMinY = -200;
+  worldBoundsMaxY = 200;
+
   // Debug flags
   debugFogDisabled = false;
 
   // Death tracking
   deathCount = 0;
+
+  // Resource tracking: net change per day
+  resourcesAtDayStart: Resources = { honey: 0, nectar: 0, wax: 0, pollen: 0, beeBread: 0 };
+  resourceDeltaYesterday: Resources = { honey: 0, nectar: 0, wax: 0, pollen: 0, beeBread: 0 };
 
   // Sound events queue (consumed by audio manager each frame)
   pendingSounds: string[] = [];

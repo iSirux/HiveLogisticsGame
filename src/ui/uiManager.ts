@@ -1,8 +1,9 @@
 import { World } from '../world/world';
-import { InputMode, BeeRole, TerrainType, BuildType, HexCell, BeeEntity, BeeState } from '../types';
+import { InputMode, BeeRole, TerrainType, BuildType, HexCell, BeeEntity, BeeState, FlowerType } from '../types';
 import { InputHandler } from '../input/inputHandler';
-import { NIGHT_START, DAWN_END, BUILD_COSTS, HONEY_STORAGE_CAPACITY, NECTAR_STORAGE_CAPACITY, POLLEN_STORAGE_CAPACITY, WAYSTATION_NECTAR_CAPACITY, WAYSTATION_POLLEN_CAPACITY } from '../constants';
-import { hexToPixel } from '../hex/hex';
+import { NIGHT_START, DAWN_END, BUILD_COSTS, HONEY_STORAGE_CAPACITY, NECTAR_STORAGE_CAPACITY, POLLEN_STORAGE_CAPACITY, WAYSTATION_NECTAR_CAPACITY, WAYSTATION_POLLEN_CAPACITY, WAX_WORKS_HONEY_CAPACITY, NECTAR_CELL_CAPACITY } from '../constants';
+import { hexToPixel, hexDistance, hexNeighbors, hexKey } from '../hex/hex';
+import { computePath } from '../entities/beeAI';
 import { getLatestSave, restoreWorld } from '../storage/saveManager';
 
 export class UIManager {
@@ -31,6 +32,12 @@ export class UIManager {
     this.bindBeesPanel();
   }
 
+  /** Sync UI controls to match current world settings (call after restore) */
+  syncFromWorld(): void {
+    this.syncSpeedButtons();
+    this.syncRoleSliders();
+  }
+
   private bindModeButtons(): void {
     document.querySelectorAll('.mode-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -40,8 +47,21 @@ export class UIManager {
     });
   }
 
+  private formatBuildCost(cost: { wax: number; honey: number }): string {
+    const parts: string[] = [];
+    if (cost.wax > 0) parts.push(`${cost.wax} wax`);
+    if (cost.honey > 0) parts.push(`${cost.honey} honey`);
+    return parts.join(', ') || 'free';
+  }
+
   private bindBuildButtons(): void {
     document.querySelectorAll('.build-btn').forEach(btn => {
+      const buildType = (btn as HTMLElement).dataset.build as BuildType;
+      const cost = BUILD_COSTS[buildType];
+      if (cost) {
+        const costSpan = btn.querySelector('.cost');
+        if (costSpan) costSpan.textContent = this.formatBuildCost(cost);
+      }
       btn.addEventListener('click', () => {
         const buildType = (btn as HTMLElement).dataset.build as BuildType;
         this.world.inputState.buildType = buildType;
@@ -64,64 +84,85 @@ export class UIManager {
         const speed = parseInt((btn as HTMLElement).dataset.speed || '1');
         this.world.settings.speedMultiplier = speed;
         this.world.settings.paused = speed === 0;
-        document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
+        this.syncSpeedButtons();
       });
+    });
+    // Sync active state to match restored world settings
+    this.syncSpeedButtons();
+  }
+
+  private syncSpeedButtons(): void {
+    const activeSpeed = this.world.settings.paused ? 0 : this.world.settings.speedMultiplier;
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      const speed = parseInt((btn as HTMLElement).dataset.speed || '1');
+      btn.classList.toggle('active', speed === activeSpeed);
     });
   }
 
   private bindRoleSliders(): void {
-    const foragerSlider = document.getElementById('slider-forager') as HTMLInputElement;
-    const nurseSlider = document.getElementById('slider-nurse') as HTMLInputElement;
-    const scoutSlider = document.getElementById('slider-scout') as HTMLInputElement;
-    const haulerSlider = document.getElementById('slider-hauler') as HTMLInputElement;
-    const foragerVal = document.getElementById('val-forager')!;
-    const nurseVal = document.getElementById('val-nurse')!;
-    const scoutVal = document.getElementById('val-scout')!;
-    const haulerVal = document.getElementById('val-hauler')!;
-    const builderVal = document.getElementById('val-builder')!;
+    const settingsKey: Record<string, keyof Pick<typeof this.world.settings, 'nurseCount' | 'scoutCount' | 'haulerCount' | 'builderCount'>> = {
+      nurse: 'nurseCount',
+      scout: 'scoutCount',
+      hauler: 'haulerCount',
+      builder: 'builderCount',
+    };
+    const roleMin: Record<string, number> = { nurse: 1, scout: 1, hauler: 0, builder: 1 };
 
-    const update = () => {
-      let fv = parseInt(foragerSlider.value);
-      let nv = parseInt(nurseSlider.value);
-      let sv = parseInt(scoutSlider.value);
-      let hv = parseInt(haulerSlider.value);
-
-      // Clamp so total <= 100
-      if (fv + nv + sv + hv > 100) {
-        hv = 100 - fv - nv - sv;
-        if (hv < 0) {
-          sv = 100 - fv - nv;
-          hv = 0;
-          if (sv < 0) {
-            nv = 100 - fv;
-            sv = 0;
-            nurseSlider.value = nv.toString();
-          }
-          scoutSlider.value = sv.toString();
-        }
-        haulerSlider.value = hv.toString();
-      }
-
-      const bv = 100 - fv - nv - sv - hv;
-      foragerVal.textContent = fv + '%';
-      nurseVal.textContent = nv + '%';
-      scoutVal.textContent = sv + '%';
-      haulerVal.textContent = hv + '%';
-      builderVal.textContent = bv + '%';
-
-      this.world.settings.foragerRatio = fv / 100;
-      this.world.settings.nurseRatio = nv / 100;
-      this.world.settings.scoutRatio = sv / 100;
-      this.world.settings.haulerRatio = hv / 100;
-
+    const change = (role: string, delta: number) => {
+      const key = settingsKey[role];
+      if (!key) return;
+      const min = roleMin[role] ?? 0;
+      const newVal = this.world.settings[key] + delta;
+      if (newVal < min) return;
+      // Don't allow total assigned to exceed total bees
+      const s = this.world.settings;
+      const totalAssigned = s.nurseCount + s.scoutCount + s.haulerCount + s.builderCount + delta;
+      if (delta > 0 && totalAssigned >= this.world.bees.length) return;
+      this.world.settings[key] = newVal;
+      this.syncRoleDisplays();
       this.reassignBees();
     };
 
-    foragerSlider.addEventListener('input', update);
-    nurseSlider.addEventListener('input', update);
-    scoutSlider.addEventListener('input', update);
-    haulerSlider.addEventListener('input', update);
+    document.querySelectorAll('.role-minus').forEach(btn => {
+      btn.addEventListener('click', () => change((btn as HTMLElement).dataset.role || '', -1));
+    });
+    document.querySelectorAll('.role-plus').forEach(btn => {
+      btn.addEventListener('click', () => change((btn as HTMLElement).dataset.role || '', 1));
+    });
+  }
+
+  private syncRoleDisplays(): void {
+    const s = this.world.settings;
+    this.setText('count-nurse', s.nurseCount.toString());
+    this.setText('count-scout', s.scoutCount.toString());
+    this.setText('count-hauler', s.haulerCount.toString());
+    this.setText('count-builder', s.builderCount.toString());
+    this.updateForagerDisplay();
+
+    // Sync disabled state on +/- buttons
+    const totalAssigned = s.nurseCount + s.scoutCount + s.haulerCount + s.builderCount;
+    const atMax = totalAssigned >= this.world.bees.length - 1; // keep at least 1 forager
+    const roleMin: Record<string, number> = { nurse: 1, scout: 1, hauler: 0, builder: 1 };
+    document.querySelectorAll('.role-minus').forEach(btn => {
+      const role = (btn as HTMLElement).dataset.role || '';
+      const key = role + 'Count' as keyof typeof s;
+      (btn as HTMLButtonElement).disabled = (s[key] as number) <= (roleMin[role] ?? 0);
+    });
+    document.querySelectorAll('.role-plus').forEach(btn => {
+      (btn as HTMLButtonElement).disabled = atMax;
+    });
+  }
+
+  private syncRoleSliders(): void {
+    this.syncRoleDisplays();
+  }
+
+  private updateForagerDisplay(): void {
+    const s = this.world.settings;
+    const assigned = Math.max(1, s.nurseCount) + Math.max(1, s.scoutCount) + s.haulerCount + Math.max(1, s.builderCount);
+    const foragerCount = Math.max(0, this.world.bees.length - assigned);
+    const el = document.getElementById('val-forager');
+    if (el) el.textContent = foragerCount.toString();
   }
 
   private bindRoleToggle(): void {
@@ -234,6 +275,71 @@ export class UIManager {
     document.getElementById('dbg-new-game')?.addEventListener('click', () => {
       this.onNewGame?.();
     });
+
+    // Copy flower arrangement to clipboard
+    document.getElementById('dbg-copy-flowers')?.addEventListener('click', () => {
+      const clusters = this.findFlowerClusters();
+      clusters.sort((a, b) => a.dist - b.dist);
+      const lines = [
+        `Seed: ${this.world.worldSeed}`,
+        `Clusters: ${clusters.length}`,
+        '',
+        'idx | pos | dist | biome | type | size | flowers',
+        '--- | --- | ---- | ----- | ---- | ---- | -------',
+      ];
+      clusters.forEach((c, i) => {
+        lines.push(`${i} | (${c.centerQ},${c.centerR}) | ${c.dist} | ${c.biome} | ${c.type} | ${c.size} | ${c.flowers}`);
+      });
+      navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        const btn = document.getElementById('dbg-copy-flowers');
+        if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy Flowers', 1500); }
+      });
+    });
+  }
+
+  /** Flood-fill to find connected flower clusters for debug output */
+  private findFlowerClusters() {
+    const visited = new Set<string>();
+    const clusters: { centerQ: number; centerR: number; dist: number; biome: string; type: string; size: number; flowers: string }[] = [];
+
+    for (const cell of this.world.grid.cells.values()) {
+      if (cell.terrain !== TerrainType.Flower) continue;
+      const key = hexKey(cell.q, cell.r);
+      if (visited.has(key)) continue;
+
+      const queue = [cell];
+      const members: { q: number; r: number }[] = [];
+      visited.add(key);
+
+      while (queue.length > 0) {
+        const cur = queue.pop()!;
+        members.push({ q: cur.q, r: cur.r });
+        for (const h of hexNeighbors(cur.q, cur.r)) {
+          const nk = hexKey(h.q, h.r);
+          if (visited.has(nk)) continue;
+          const nc = this.world.grid.get(h.q, h.r);
+          if (!nc || nc.terrain !== TerrainType.Flower) continue;
+          visited.add(nk);
+          queue.push(nc);
+        }
+      }
+
+      let sumQ = 0, sumR = 0;
+      for (const m of members) { sumQ += m.q; sumR += m.r; }
+      const centerQ = Math.round(sumQ / members.length);
+      const centerR = Math.round(sumR / members.length);
+
+      clusters.push({
+        centerQ, centerR,
+        dist: hexDistance(0, 0, centerQ, centerR),
+        biome: cell.biome,
+        type: cell.flowerType,
+        size: members.length,
+        flowers: members.map(m => `(${m.q},${m.r})`).join(' '),
+      });
+    }
+
+    return clusters;
   }
 
   /** Let Game register callbacks without circular imports */
@@ -242,27 +348,9 @@ export class UIManager {
     this.onNewGame = onNewGame;
   }
 
-  /** Sync role sliders to match world settings (after load) */
+  /** Sync role inputs to match world settings (after load) */
   private syncSlidersFromWorld(): void {
-    const set = (id: string, val: number) => {
-      const el = document.getElementById(id) as HTMLInputElement | null;
-      if (el) el.value = Math.round(val * 100).toString();
-    };
-    set('slider-forager', this.world.settings.foragerRatio);
-    set('slider-nurse', this.world.settings.nurseRatio);
-    set('slider-scout', this.world.settings.scoutRatio);
-    set('slider-hauler', this.world.settings.haulerRatio);
-
-    const setText = (id: string, val: number) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = Math.round(val * 100) + '%';
-    };
-    setText('val-forager', this.world.settings.foragerRatio);
-    setText('val-nurse', this.world.settings.nurseRatio);
-    setText('val-scout', this.world.settings.scoutRatio);
-    setText('val-hauler', this.world.settings.haulerRatio);
-    const builderPct = 1 - this.world.settings.foragerRatio - this.world.settings.nurseRatio - this.world.settings.scoutRatio - this.world.settings.haulerRatio;
-    setText('val-builder', Math.max(0, builderPct));
+    this.syncRoleSliders();
   }
 
   private bindBeesPanel(): void {
@@ -270,6 +358,11 @@ export class UIManager {
     const tab = document.getElementById('bees-tab');
     const closeBtn = document.getElementById('bees-close');
     if (!panel || !tab) return;
+
+    // Close by default on mobile
+    if (window.innerWidth <= 600) {
+      panel.classList.remove('bees-open');
+    }
 
     tab.addEventListener('click', () => {
       panel.classList.add('bees-open');
@@ -340,51 +433,89 @@ export class UIManager {
 
   private reassignBees(): void {
     const world = this.world;
-    const total = world.bees.length;
-    const foragerTarget = Math.max(1, Math.round(world.settings.foragerRatio * total));
-    const nurseTarget = Math.max(1, Math.round(world.settings.nurseRatio * total));
-    const scoutTarget = Math.max(1, Math.round(world.settings.scoutRatio * total));
-    const haulerTarget = Math.max(1, Math.round(world.settings.haulerRatio * total));
+    const s = world.settings;
+    const nurseTarget = Math.max(1, s.nurseCount);
+    const scoutTarget = Math.max(1, s.scoutCount);
+    const haulerTarget = s.haulerCount;
+    const builderTarget = Math.max(1, s.builderCount);
 
-    let foragers = world.bees.filter(b => b.role === BeeRole.Forager).length;
     let nurses = world.bees.filter(b => b.role === BeeRole.Nurse).length;
     let scouts = world.bees.filter(b => b.role === BeeRole.Scout).length;
     let haulers = world.bees.filter(b => b.role === BeeRole.Hauler).length;
+    let builders = world.bees.filter(b => b.role === BeeRole.Builder).length;
+    let foragers = world.bees.filter(b => b.role === BeeRole.Forager).length;
 
-    const assignToNeeded = (bee: BeeEntity, _fromRole: BeeRole, fromCount: { v: number }) => {
-      if (foragers < foragerTarget) { bee.role = BeeRole.Forager; fromCount.v--; foragers++; }
-      else if (nurses < nurseTarget) { bee.role = BeeRole.Nurse; fromCount.v--; nurses++; }
-      else if (scouts < scoutTarget) { bee.role = BeeRole.Scout; fromCount.v--; scouts++; }
-      else if (haulers < haulerTarget) { bee.role = BeeRole.Hauler; fromCount.v--; haulers++; }
-      else { bee.role = BeeRole.Builder; fromCount.v--; }
+    const foragerTarget = Math.max(0, world.bees.length - nurseTarget - scoutTarget - haulerTarget - builderTarget);
+
+    const pickNewRole = (): BeeRole => {
+      if (nurses < nurseTarget) { nurses++; return BeeRole.Nurse; }
+      if (scouts < scoutTarget) { scouts++; return BeeRole.Scout; }
+      if (haulers < haulerTarget) { haulers++; return BeeRole.Hauler; }
+      if (builders < builderTarget) { builders++; return BeeRole.Builder; }
+      foragers++; return BeeRole.Forager;
     };
 
-    for (const bee of world.bees) {
-      const isIdle = bee.state === 'idle' || bee.state === 'idle_at_hive' || bee.state === 'resting';
-      if (!isIdle) continue;
-
-      if (bee.role === BeeRole.Forager && foragers > foragerTarget) {
-        const c = { v: foragers };
-        assignToNeeded(bee, BeeRole.Forager, c);
-        foragers = c.v;
-      } else if (bee.role === BeeRole.Nurse && nurses > nurseTarget) {
-        const c = { v: nurses };
-        assignToNeeded(bee, BeeRole.Nurse, c);
-        nurses = c.v;
-      } else if (bee.role === BeeRole.Scout && scouts > scoutTarget) {
-        const c = { v: scouts };
-        assignToNeeded(bee, BeeRole.Scout, c);
-        scouts = c.v;
-      } else if (bee.role === BeeRole.Hauler && haulers > haulerTarget) {
-        const c = { v: haulers };
-        assignToNeeded(bee, BeeRole.Hauler, c);
-        haulers = c.v;
-      } else if (bee.role === BeeRole.Builder) {
-        if (foragers < foragerTarget) { bee.role = BeeRole.Forager; foragers++; }
-        else if (nurses < nurseTarget) { bee.role = BeeRole.Nurse; nurses++; }
-        else if (scouts < scoutTarget) { bee.role = BeeRole.Scout; scouts++; }
-        else if (haulers < haulerTarget) { bee.role = BeeRole.Hauler; haulers++; }
+    const sendToHive = (bee: BeeEntity) => {
+      // Drop any carried resources (they're lost — bee abandons task)
+      bee.carrying.nectar = 0;
+      bee.carrying.pollen = 0;
+      bee.explorationTarget = null;
+      bee.danceTicks = 0;
+      bee.stateTimer = 0;
+      // If already at hive, go idle immediately
+      if (hexDistance(bee.q, bee.r, 0, 0) <= 1) {
+        bee.state = BeeState.Idle;
+        bee.path = [];
+      } else {
+        bee.state = BeeState.ReturningToHive;
+        bee.path = computePath(bee.q, bee.r, 0, 0, world);
       }
+    };
+
+    const isOverTarget = (role: BeeRole): boolean => {
+      switch (role) {
+        case BeeRole.Nurse: return nurses > nurseTarget;
+        case BeeRole.Scout: return scouts > scoutTarget;
+        case BeeRole.Hauler: return haulers > haulerTarget;
+        case BeeRole.Builder: return builders > builderTarget;
+        case BeeRole.Forager: return foragers > foragerTarget;
+      }
+    };
+
+    const decCount = (role: BeeRole) => {
+      switch (role) {
+        case BeeRole.Nurse: nurses--; break;
+        case BeeRole.Scout: scouts--; break;
+        case BeeRole.Hauler: haulers--; break;
+        case BeeRole.Builder: builders--; break;
+        case BeeRole.Forager: foragers--; break;
+      }
+    };
+
+    // Reassign idle bees first (cheaper — no interruption needed)
+    for (const bee of world.bees) {
+      if (bee.state === BeeState.Hungry || bee.state === BeeState.Eating) continue;
+      const isIdle = bee.state === BeeState.Idle || bee.state === BeeState.IdleAtHive || bee.state === BeeState.Resting;
+      if (!isIdle) continue;
+      if (!isOverTarget(bee.role)) continue;
+
+      decCount(bee.role);
+      const newRole = pickNewRole();
+      bee.role = newRole;
+      bee.state = BeeState.Idle;
+    }
+
+    // Then reassign busy bees if still needed — interrupt and send to hive
+    for (const bee of world.bees) {
+      if (bee.state === BeeState.Hungry || bee.state === BeeState.Eating) continue;
+      const isIdle = bee.state === BeeState.Idle || bee.state === BeeState.IdleAtHive || bee.state === BeeState.Resting;
+      if (isIdle) continue;
+      if (!isOverTarget(bee.role)) continue;
+
+      decCount(bee.role);
+      const newRole = pickNewRole();
+      bee.role = newRole;
+      sendToHive(bee);
     }
   }
 
@@ -393,19 +524,23 @@ export class UIManager {
 
     // Update resource display with max capacities
     const honeyMax = this.world.grid.cellsOfType(TerrainType.HoneyStorage).length * HONEY_STORAGE_CAPACITY;
-    const nectarMax = this.world.grid.cellsOfType(TerrainType.Processing).length * NECTAR_STORAGE_CAPACITY;
+    const nectarMax = this.world.grid.cellsOfType(TerrainType.Processing).length * NECTAR_STORAGE_CAPACITY
+      + this.world.grid.cellsOfType(TerrainType.NectarStorage).length * NECTAR_CELL_CAPACITY;
     this.setText('res-honey', `${this.world.resources.honey.toFixed(1)}/${honeyMax}`);
     this.setText('res-nectar', `${this.world.resources.nectar.toFixed(1)}/${nectarMax}`);
     this.setText('res-pollen', this.world.resources.pollen.toFixed(1));
     this.setText('res-beebread', this.world.resources.beeBread.toFixed(2));
     this.setText('res-wax', this.world.resources.wax.toFixed(1));
-    const foragers = this.world.bees.filter(b => b.role === BeeRole.Forager).length;
-    const nurses = this.world.bees.filter(b => b.role === BeeRole.Nurse).length;
-    const scouts = this.world.bees.filter(b => b.role === BeeRole.Scout).length;
-    const haulers = this.world.bees.filter(b => b.role === BeeRole.Hauler).length;
-    const builders = this.world.bees.filter(b => b.role === BeeRole.Builder).length;
-    let beeText = `${this.world.bees.length} (${foragers}F/${nurses}N/${scouts}S/${haulers}H/${builders}B)`;
-    if (this.world.deathCount > 0) beeText += ` [${this.world.deathCount} died]`;
+
+    // Yesterday's net change
+    const d = this.world.resourceDeltaYesterday;
+    this.setDelta('res-delta-honey', d.honey);
+    this.setDelta('res-delta-nectar', d.nectar);
+    this.setDelta('res-delta-pollen', d.pollen);
+    this.setDelta('res-delta-beebread', d.beeBread);
+    this.setDelta('res-delta-wax', d.wax);
+    let beeText = `Bees: ${this.world.bees.length}`;
+    if (this.world.deathCount > 0) beeText += ` (${this.world.deathCount} died)`;
     this.setText('res-bees', beeText);
 
     // Update time display
@@ -441,13 +576,14 @@ export class UIManager {
       }
     }
 
-    this.updateDebugPanel(foragers, nurses, scouts, builders, haulers);
+    this.updateForagerDisplay();
+    this.updateDebugPanel();
     this.updateBeesPanel();
     this.updateHoverTooltip();
     this.updateSelectionPanel();
   }
 
-  private updateDebugPanel(foragers: number, nurses: number, scouts: number, builders: number, haulers: number): void {
+  private updateDebugPanel(): void {
     // FPS calculation
     this.frameCount++;
     const now = performance.now();
@@ -466,42 +602,32 @@ export class UIManager {
     this.setText('dbg-day-pct', (this.world.dayProgress * 100).toFixed(1) + '%');
     this.setText('dbg-fps', this.currentFps.toString());
 
-    this.setText('dbg-foragers', foragers.toString());
-    this.setText('dbg-nurses', nurses.toString());
-    this.setText('dbg-scouts', scouts.toString());
-    this.setText('dbg-builders', builders.toString());
-    this.setText('dbg-haulers', haulers.toString());
-    this.setText('dbg-total-bees', this.world.bees.length.toString());
-
-    // Flower stats
-    let totalFlowers = 0;
-    let flowersWithNectar = 0;
-    for (const cell of this.world.grid.cells.values()) {
-      if (cell.terrain === TerrainType.Flower) {
-        totalFlowers++;
-        if (cell.nectarAmount > 0.01) flowersWithNectar++;
-      }
-    }
-    this.setText('dbg-flowers-total', totalFlowers.toString());
-    this.setText('dbg-flowers-nectar', flowersWithNectar.toString());
-
-    // Resources
-    const honeyMax = this.world.grid.cellsOfType(TerrainType.HoneyStorage).length * HONEY_STORAGE_CAPACITY;
-    this.setText('dbg-honey', `${this.world.resources.honey.toFixed(1)} / ${honeyMax}`);
-    this.setText('dbg-nectar', this.world.resources.nectar.toFixed(1));
-    this.setText('dbg-pollen', this.world.resources.pollen.toFixed(1));
-    this.setText('dbg-beebread', this.world.resources.beeBread.toFixed(2));
-    this.setText('dbg-wax', this.world.resources.wax.toFixed(1));
   }
 
   private terrainLabel(t: string): string {
     return t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
+  private flowerTypeName(ft: FlowerType): string {
+    return ft.charAt(0).toUpperCase() + ft.slice(1);
+  }
+
+  private biomeName(cell: HexCell): string {
+    return cell.biome.charAt(0).toUpperCase() + cell.biome.slice(1);
+  }
+
+  private terrainWithBiome(cell: HexCell): string {
+    const label = this.terrainLabel(cell.terrain);
+    if (cell.terrain === TerrainType.Grass || cell.terrain === TerrainType.Tree || cell.terrain === TerrainType.Water) {
+      return `${label} (${this.biomeName(cell)})`;
+    }
+    return label;
+  }
+
   private cellSummary(cell: HexCell): string {
     switch (cell.terrain) {
       case TerrainType.Flower:
-        return `Nectar ${(cell.nectarAmount * 100).toFixed(0)}%`;
+        return `${this.flowerTypeName(cell.flowerType)} - Nectar ${(cell.nectarAmount * 100).toFixed(0)}%`;
       case TerrainType.HoneyStorage:
         return `Honey ${cell.honeyStored.toFixed(1)}/${HONEY_STORAGE_CAPACITY}`;
       case TerrainType.PollenStorage:
@@ -514,6 +640,10 @@ export class UIManager {
         return `Resin ${(cell.resinAmount * 100).toFixed(0)}%`;
       case TerrainType.Waystation:
         return `Nectar ${cell.nectarStored.toFixed(1)}/${WAYSTATION_NECTAR_CAPACITY} Pollen ${cell.pollenStored.toFixed(1)}/${WAYSTATION_POLLEN_CAPACITY}`;
+      case TerrainType.WaxWorks:
+        return `Honey ${cell.honeyStored.toFixed(1)}/${WAX_WORKS_HONEY_CAPACITY}`;
+      case TerrainType.NectarStorage:
+        return `Nectar ${cell.nectarStored.toFixed(1)}/${NECTAR_CELL_CAPACITY}`;
       default:
         return '';
     }
@@ -539,7 +669,7 @@ export class UIManager {
     if (!cell.explored && !this.world.debugFogDisabled) {
       text = 'Unexplored - send scouts to reveal';
     } else {
-      const label = this.terrainLabel(cell.terrain);
+      const label = this.terrainWithBiome(cell);
       const summary = this.cellSummary(cell);
       const beeCount = this.world.bees.filter(b => b.q === hovered.q && b.r === hovered.r).length;
       text = label;
@@ -575,12 +705,17 @@ export class UIManager {
     panel.classList.add('visible');
     // Auto-close role panel on mobile when selection opens
     document.getElementById('role-panel')?.classList.remove('mobile-open');
-    let html = `<div class="info-header">${this.terrainLabel(cell.terrain)}</div>`;
+    let html = `<div class="info-header">${this.terrainWithBiome(cell)}</div>`;
     html += `<div>Position: ${cell.q}, ${cell.r}</div>`;
 
     if (cell.terrain === TerrainType.Flower) {
+      html += `<div>Type: ${this.flowerTypeName(cell.flowerType)}</div>`;
       html += `<div>Nectar: ${(cell.nectarAmount * 100).toFixed(0)}% / ${(cell.nectarMax * 100).toFixed(0)}%</div>`;
-      html += `<div>Pollen: ${(cell.pollenAmount * 100).toFixed(0)}% / ${(cell.pollenMax * 100).toFixed(0)}%</div>`;
+      if (cell.pollenMax > 0) {
+        html += `<div>Pollen: ${(cell.pollenAmount * 100).toFixed(0)}% / ${(cell.pollenMax * 100).toFixed(0)}%</div>`;
+      } else {
+        html += `<div>Pollen: None</div>`;
+      }
     }
     if (cell.terrain === TerrainType.Tree) {
       html += `<div>Resin: ${(cell.resinAmount * 100).toFixed(0)}%</div>`;
@@ -606,10 +741,12 @@ export class UIManager {
       html += `<div>Nectar: ${cell.nectarStored.toFixed(1)}/${WAYSTATION_NECTAR_CAPACITY}</div>`;
       html += `<div>Pollen: ${cell.pollenStored.toFixed(1)}/${WAYSTATION_POLLEN_CAPACITY}</div>`;
     }
-    if (cell.pheromone > 0.01) {
-      html += `<div>Pheromone: ${(cell.pheromone * 100).toFixed(0)}%</div>`;
+    if (cell.terrain === TerrainType.WaxWorks) {
+      html += `<div>Honey: ${cell.honeyStored.toFixed(1)}/${WAX_WORKS_HONEY_CAPACITY}</div>`;
     }
-
+    if (cell.terrain === TerrainType.NectarStorage) {
+      html += `<div>Nectar: ${cell.nectarStored.toFixed(1)}/${NECTAR_CELL_CAPACITY}</div>`;
+    }
     // Detailed bee list
     const beesHere = this.world.bees.filter(b => b.q === sel.q && b.r === sel.r);
     if (beesHere.length > 0) {
@@ -635,5 +772,18 @@ export class UIManager {
   private setText(id: string, text: string): void {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
+  }
+
+  private setDelta(id: string, value: number): void {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (this.world.dayCount <= 1) {
+      el.textContent = '';
+      return;
+    }
+    const abs = Math.abs(value);
+    const text = value >= 0 ? `+${abs.toFixed(1)}` : `-${abs.toFixed(1)}`;
+    el.textContent = text;
+    el.className = 'res-delta ' + (value > 0.05 ? 'positive' : value < -0.05 ? 'negative' : 'zero');
   }
 }

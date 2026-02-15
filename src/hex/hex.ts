@@ -85,17 +85,34 @@ export function hexDisk(centerQ: number, centerR: number, radius: number): Axial
   return results;
 }
 
+/** Pre-computed corner offsets for flat-top hex (avoids per-call trig + allocation) */
+const HEX_CORNER_DX: number[] = [];
+const HEX_CORNER_DY: number[] = [];
+for (let i = 0; i < 6; i++) {
+  const angle = (Math.PI / 180) * (60 * i);
+  HEX_CORNER_DX.push(HEX_SIZE * Math.cos(angle));
+  HEX_CORNER_DY.push(HEX_SIZE * Math.sin(angle));
+}
+
 /** Get the 6 corner points of a hex in pixel coords (flat-top) */
 export function hexCorners(cx: number, cy: number): { x: number; y: number }[] {
   const corners: { x: number; y: number }[] = [];
   for (let i = 0; i < 6; i++) {
-    const angle = Math.PI / 180 * (60 * i);
     corners.push({
-      x: cx + HEX_SIZE * Math.cos(angle),
-      y: cy + HEX_SIZE * Math.sin(angle),
+      x: cx + HEX_CORNER_DX[i],
+      y: cy + HEX_CORNER_DY[i],
     });
   }
   return corners;
+}
+
+/** Trace a hex path on the canvas without allocating corner arrays */
+export function hexPath(ctx: CanvasRenderingContext2D, cx: number, cy: number) {
+  ctx.moveTo(cx + HEX_CORNER_DX[0], cy + HEX_CORNER_DY[0]);
+  for (let i = 1; i < 6; i++) {
+    ctx.lineTo(cx + HEX_CORNER_DX[i], cy + HEX_CORNER_DY[i]);
+  }
+  ctx.closePath();
 }
 
 /** Hex key for map lookups */

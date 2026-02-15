@@ -1,63 +1,59 @@
 import { World } from './world';
-import { TerrainType, BeeRole, BeeState, BeeEntity } from '../types';
-import { hexToPixel, hexRing, hexDisk, hexDistance } from '../hex/hex';
+import { TerrainType, BeeRole, BeeState, BeeEntity, FlowerType, Biome, HexCell } from '../types';
+import { hexToPixel, hexRing, hexDisk, hexNeighbors, hexDistance, hexKey } from '../hex/hex';
 import {
-  WORLD_RADIUS, FLOWER_CLUSTER_COUNT, FOREST_FLOWER_CLUSTER_COUNT, FLOWER_MIN_DISTANCE,
-  INITIAL_NECTAR_MIN, INITIAL_NECTAR_MAX,
-  INITIAL_POLLEN_MIN, INITIAL_POLLEN_MAX,
   STARTING_FORAGERS, STARTING_NURSES, STARTING_BUILDERS, STARTING_SCOUTS, STARTING_HAULERS,
-  BIOME_MEADOW_RADIUS, BIOME_FOREST_RADIUS,
-  TREE_CLUSTER_COUNT, WATER_CLUSTER_COUNT,
-  BEE_MEAN_LIFESPAN, BEE_LIFESPAN_VARIANCE,
-  MEADOW_FLOWERS_PER_CLUSTER, FOREST_FLOWERS_MIN, FOREST_FLOWERS_MAX,
+  BEE_MEAN_LIFESPAN, BEE_LIFESPAN_VARIANCE, FLOWER_TYPE_CONFIG,
 } from '../constants';
-
-const FLOWER_COLORS = ['#ff69b4', '#ff6090', '#e060e0', '#c070ff', '#ff8040', '#ff5050'];
+import { ensureChunksAroundPoint, updateWorldBounds } from './procgen';
 
 export function generateWorld(world: World): void {
-  // Fill grass hexes
-  for (const h of hexDisk(0, 0, WORLD_RADIUS)) {
-    world.grid.createCell(h.q, h.r, TerrainType.Grass);
-  }
+  // Set seed for new world
+  world.worldSeed = Math.floor(Math.random() * 0x7FFFFFFF);
+
+  // Generate initial chunks around origin (radius 2 chunks = covers ~32 hex radius)
+  ensureChunksAroundPoint(world, 0, 0, 2);
 
   // Place hive at origin
   placeHive(world);
 
-  // Scatter flower clusters (mainly in meadow, some in forest)
-  placeFlowers(world);
+  // Place fixed starter clover cluster near the hive
+  placeStarterFlowers(world);
 
-  // Place tree clusters in forest biome
-  placeTrees(world);
-
-  // Place water clusters in wetland biome
-  placeWater(world);
-
-  // Initialize fog: only hive area (radius 4) is explored
+  // Initialize fog: only hive area (radius 6) is explored
   initFog(world);
+
+  // Update world bounds after initial setup
+  updateWorldBounds(world);
 
   // Spawn starting bees
   spawnStartingBees(world);
+
+  // Log world generation summary
+  logWorldGenSummary(world);
 }
 
 function placeHive(world: World): void {
-  // Entrance at origin
-  const entrance = world.grid.get(0, 0)!;
+  // Ensure cells exist at origin and ring-1
+  const entrance = world.grid.get(0, 0);
+  if (!entrance) return;
   entrance.terrain = TerrainType.HiveEntrance;
 
-  // Ring-1: 2 honey storage, 1 pollen storage, 1 processing, 2 brood
+  // Ring-1: 2 honey storage, 1 pollen storage, 1 nectar storage, 1 processing, 1 brood
   const ring = hexRing(0, 0, 1);
   const assignments: TerrainType[] = [
     TerrainType.HoneyStorage,
     TerrainType.HoneyStorage,
     TerrainType.Processing,
     TerrainType.Brood,
-    TerrainType.Brood,
+    TerrainType.NectarStorage,
     TerrainType.PollenStorage,
   ];
   for (let i = 0; i < ring.length; i++) {
-    const cell = world.grid.get(ring[i].q, ring[i].r)!;
+    const cell = world.grid.get(ring[i].q, ring[i].r);
+    if (!cell) continue;
     cell.terrain = assignments[i];
-    // Seed honey storage with starting honey so bees can eat before the pipeline runs
+    // Seed honey storage with starting honey
     if (assignments[i] === TerrainType.HoneyStorage) {
       cell.honeyStored = 3;
       world.resources.honey += 3;
@@ -65,159 +61,207 @@ function placeHive(world: World): void {
   }
 }
 
-function placeFlowers(world: World): void {
-  const placed: { q: number; r: number }[] = [];
+function placeStarterFlowers(world: World): void {
+  // Place a single clover cluster at a random position on ring 4 from hive
+  const cfg = FLOWER_TYPE_CONFIG[FlowerType.Clover];
+  const ring = hexRing(0, 0, 4);
+  const pick = Math.floor(Math.random() * ring.length);
+  const centerQ = ring[pick].q;
+  const centerR = ring[pick].r;
 
-  // Meadow flowers (small clusters near hive to encourage expansion)
-  for (let i = 0; i < FLOWER_CLUSTER_COUNT; i++) {
-    placeFlowerCluster(world, placed, FLOWER_MIN_DISTANCE, BIOME_MEADOW_RADIUS, i, MEADOW_FLOWERS_PER_CLUSTER);
-  }
+  // Center flower + ring-1 neighbors = a nice cluster of ~5 flowers
+  const clusterPositions = [
+    { q: centerQ, r: centerR },
+    ...hexNeighbors(centerQ, centerR).slice(0, 4), // 4 surrounding flowers
+  ];
 
-  // Forest flowers (larger clusters further out as reward for expanding)
-  for (let i = 0; i < FOREST_FLOWER_CLUSTER_COUNT; i++) {
-    const count = FOREST_FLOWERS_MIN + Math.floor(Math.random() * (FOREST_FLOWERS_MAX - FOREST_FLOWERS_MIN + 1));
-    placeFlowerCluster(world, placed, BIOME_MEADOW_RADIUS, BIOME_FOREST_RADIUS, FLOWER_CLUSTER_COUNT + i, count);
-  }
-}
+  for (const pos of clusterPositions) {
+    const cell = world.grid.get(pos.q, pos.r);
+    if (!cell) continue;
+    // Don't overwrite hive cells
+    if (cell.terrain !== TerrainType.Grass) continue;
 
-function placeFlowerCluster(
-  world: World,
-  placed: { q: number; r: number }[],
-  minDist: number,
-  maxDist: number,
-  colorIndex: number,
-  flowerCount: number,
-): void {
-  let attempts = 0;
-  while (attempts < 100) {
-    attempts++;
-    const angle = Math.random() * Math.PI * 2;
-    const dist = minDist + Math.random() * (maxDist - minDist);
-    const fq = Math.round(Math.cos(angle) * dist * 0.67);
-    const fr = Math.round(Math.sin(angle) * dist * 0.67 - fq * 0.5);
-
-    if (hexDistance(0, 0, fq, fr) < minDist) continue;
-    if (hexDistance(0, 0, fq, fr) > maxDist) continue;
-
-    let tooClose = false;
-    for (const p of placed) {
-      if (hexDistance(p.q, p.r, fq, fr) < 3) { tooClose = true; break; }
-    }
-    if (tooClose) continue;
-
-    const color = FLOWER_COLORS[colorIndex % FLOWER_COLORS.length];
-    // Gather candidate hexes (center + ring-1), filter to placeable grass
-    const candidates = [...hexRing(fq, fr, 0), ...hexRing(fq, fr, 1)]
-      .filter(h => {
-        const cell = world.grid.get(h.q, h.r);
-        return cell && cell.terrain === TerrainType.Grass;
-      });
-
-    // Shuffle and pick up to flowerCount hexes
-    for (let i = candidates.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
-    }
-    const selected = candidates.slice(0, flowerCount);
-
-    for (const h of selected) {
-      const cell = world.grid.get(h.q, h.r)!;
-      cell.terrain = TerrainType.Flower;
-      cell.nectarMax = INITIAL_NECTAR_MIN + Math.random() * (INITIAL_NECTAR_MAX - INITIAL_NECTAR_MIN);
-      cell.nectarAmount = cell.nectarMax;
-      cell.pollenMax = INITIAL_POLLEN_MIN + Math.random() * (INITIAL_POLLEN_MAX - INITIAL_POLLEN_MIN);
-      cell.pollenAmount = cell.pollenMax;
-      cell.flowerColor = color;
-    }
-
-    placed.push({ q: fq, r: fr });
-    break;
-  }
-}
-
-function placeTrees(world: World): void {
-  const placed: { q: number; r: number }[] = [];
-
-  for (let i = 0; i < TREE_CLUSTER_COUNT; i++) {
-    let attempts = 0;
-    while (attempts < 100) {
-      attempts++;
-      const angle = Math.random() * Math.PI * 2;
-      const dist = BIOME_MEADOW_RADIUS + Math.random() * (BIOME_FOREST_RADIUS - BIOME_MEADOW_RADIUS);
-      const tq = Math.round(Math.cos(angle) * dist * 0.67);
-      const tr = Math.round(Math.sin(angle) * dist * 0.67 - tq * 0.5);
-
-      if (hexDistance(0, 0, tq, tr) < BIOME_MEADOW_RADIUS) continue;
-      if (hexDistance(0, 0, tq, tr) > BIOME_FOREST_RADIUS) continue;
-
-      let tooClose = false;
-      for (const p of placed) {
-        if (hexDistance(p.q, p.r, tq, tr) < 3) { tooClose = true; break; }
-      }
-      if (tooClose) continue;
-
-      const clusterHexes = [...hexRing(tq, tr, 0), ...hexRing(tq, tr, 1)];
-      for (const h of clusterHexes) {
-        const cell = world.grid.get(h.q, h.r);
-        if (cell && cell.terrain === TerrainType.Grass) {
-          if (Math.random() < 0.7) {
-            cell.terrain = TerrainType.Tree;
-            cell.resinMax = 0.5 + Math.random() * 0.5;
-            cell.resinAmount = cell.resinMax;
-          }
-        }
-      }
-
-      placed.push({ q: tq, r: tr });
-      break;
-    }
-  }
-}
-
-function placeWater(world: World): void {
-  const placed: { q: number; r: number }[] = [];
-
-  for (let i = 0; i < WATER_CLUSTER_COUNT; i++) {
-    let attempts = 0;
-    while (attempts < 100) {
-      attempts++;
-      const angle = Math.random() * Math.PI * 2;
-      const dist = BIOME_FOREST_RADIUS + Math.random() * (WORLD_RADIUS - BIOME_FOREST_RADIUS);
-      const wq = Math.round(Math.cos(angle) * dist * 0.67);
-      const wr = Math.round(Math.sin(angle) * dist * 0.67 - wq * 0.5);
-
-      if (hexDistance(0, 0, wq, wr) < BIOME_FOREST_RADIUS) continue;
-      if (hexDistance(0, 0, wq, wr) > WORLD_RADIUS - 2) continue;
-
-      let tooClose = false;
-      for (const p of placed) {
-        if (hexDistance(p.q, p.r, wq, wr) < 4) { tooClose = true; break; }
-      }
-      if (tooClose) continue;
-
-      const clusterHexes = [...hexRing(wq, wr, 0), ...hexRing(wq, wr, 1), ...hexRing(wq, wr, 2)];
-      for (const h of clusterHexes) {
-        const cell = world.grid.get(h.q, h.r);
-        if (cell && cell.terrain === TerrainType.Grass) {
-          const d = hexDistance(wq, wr, h.q, h.r);
-          if (d <= 1 || Math.random() < 0.5) {
-            cell.terrain = TerrainType.Water;
-          }
-        }
-      }
-
-      placed.push({ q: wq, r: wr });
-      break;
-    }
+    cell.terrain = TerrainType.Flower;
+    cell.flowerType = FlowerType.Clover;
+    cell.flowerColor = cfg.color;
+    cell.nectarMax = (cfg.nectarMin + cfg.nectarMax) / 2;
+    cell.nectarAmount = cell.nectarMax;
+    cell.pollenMax = (cfg.pollenMin + cfg.pollenMax) / 2;
+    cell.pollenAmount = cell.pollenMax;
   }
 }
 
 function initFog(world: World): void {
-  // Reveal radius 6 so foragers can see nearby flower clusters (min distance 4)
+  // Reveal radius 6 so foragers can see nearby flower clusters
   for (const h of hexDisk(0, 0, 6)) {
     const cell = world.grid.get(h.q, h.r);
     if (cell) cell.explored = true;
   }
+}
+
+interface FlowerCluster {
+  flowers: HexCell[];
+  type: FlowerType;
+  biome: Biome;
+  centerQ: number;
+  centerR: number;
+  totalNectar: number;
+  totalPollen: number;
+  distFromHive: number;
+}
+
+/** Flood-fill to find connected flower clusters (hex-adjacent) */
+function findFlowerClusters(world: World): FlowerCluster[] {
+  const visited = new Set<string>();
+  const clusters: FlowerCluster[] = [];
+
+  for (const cell of world.grid.cells.values()) {
+    if (cell.terrain !== TerrainType.Flower) continue;
+    const key = hexKey(cell.q, cell.r);
+    if (visited.has(key)) continue;
+
+    // BFS flood-fill: hex-adjacent flowers belong to the same cluster
+    const queue: HexCell[] = [cell];
+    const members: HexCell[] = [];
+    visited.add(key);
+
+    while (queue.length > 0) {
+      const cur = queue.pop()!;
+      members.push(cur);
+
+      for (const h of hexNeighbors(cur.q, cur.r)) {
+        const nk = hexKey(h.q, h.r);
+        if (visited.has(nk)) continue;
+        const nc = world.grid.get(h.q, h.r);
+        if (!nc || nc.terrain !== TerrainType.Flower) continue;
+        visited.add(nk);
+        queue.push(nc);
+      }
+    }
+
+    // Compute cluster center (average position)
+    let sumQ = 0, sumR = 0, totalNectar = 0, totalPollen = 0;
+    for (const m of members) {
+      sumQ += m.q;
+      sumR += m.r;
+      totalNectar += m.nectarAmount;
+      totalPollen += m.pollenAmount;
+    }
+    const centerQ = Math.round(sumQ / members.length);
+    const centerR = Math.round(sumR / members.length);
+
+    clusters.push({
+      flowers: members,
+      type: members[0].flowerType,
+      biome: members[0].biome,
+      centerQ,
+      centerR,
+      totalNectar,
+      totalPollen,
+      distFromHive: hexDistance(0, 0, centerQ, centerR),
+    });
+  }
+
+  return clusters;
+}
+
+function logWorldGenSummary(world: World): void {
+  const biomeCounts: Record<Biome, number> = { meadow: 0, forest: 0, wetland: 0, wilds: 0 };
+  const terrainCounts: Partial<Record<TerrainType, number>> = {};
+  let totalCells = 0;
+
+  for (const cell of world.grid.cells.values()) {
+    totalCells++;
+    biomeCounts[cell.biome] = (biomeCounts[cell.biome] || 0) + 1;
+    terrainCounts[cell.terrain] = (terrainCounts[cell.terrain] || 0) + 1;
+  }
+
+  const flowerCount = terrainCounts[TerrainType.Flower] || 0;
+
+  console.group('[WorldGen] Generation Summary');
+  console.log(`Seed: ${world.worldSeed}`);
+  console.log(`Total cells: ${totalCells} | Chunks: ${world.loadedChunks.size}`);
+
+  // Biomes
+  console.log('Biomes:', Object.entries(biomeCounts).map(([b, c]) => `${b}=${c} (${(c / totalCells * 100).toFixed(1)}%)`).join(', '));
+
+  // Terrain
+  console.log('Terrain:', Object.entries(terrainCounts).map(([t, c]) => `${t}=${c}`).join(', '));
+
+  // --- Flower Cluster Analysis ---
+  const clusters = findFlowerClusters(world);
+  clusters.sort((a, b) => a.distFromHive - b.distFromHive);
+
+  // Per-biome cluster stats
+  const biomeClusterStats: Record<string, { count: number; flowers: number }> = {};
+  // Per-type cluster stats
+  const typeClusterStats: Record<string, { count: number; flowers: number; nectar: number; pollen: number }> = {};
+
+  for (const c of clusters) {
+    const bs = biomeClusterStats[c.biome] ??= { count: 0, flowers: 0 };
+    bs.count++;
+    bs.flowers += c.flowers.length;
+
+    const ts = typeClusterStats[c.type] ??= { count: 0, flowers: 0, nectar: 0, pollen: 0 };
+    ts.count++;
+    ts.flowers += c.flowers.length;
+    ts.nectar += c.totalNectar;
+    ts.pollen += c.totalPollen;
+  }
+
+  console.group(`Flower Clusters: ${clusters.length} clusters, ${flowerCount} flowers total`);
+
+  // By biome
+  console.log('By biome:', Object.entries(biomeClusterStats)
+    .map(([b, s]) => `${b}: ${s.count} clusters (${s.flowers} flowers)`)
+    .join(' | '));
+
+  // By type
+  console.log('By type:', Object.entries(typeClusterStats)
+    .map(([t, s]) => `${t}: ${s.count} clusters, ${s.flowers} flowers, nectar=${s.nectar.toFixed(1)}, pollen=${s.pollen.toFixed(1)}`)
+    .join(' | '));
+
+  // Cluster size distribution
+  const sizes = clusters.map(c => c.flowers.length);
+  if (sizes.length > 0) {
+    sizes.sort((a, b) => a - b);
+    console.log(`Cluster sizes: min=${sizes[0]}, max=${sizes[sizes.length - 1]}, median=${sizes[Math.floor(sizes.length / 2)]}, avg=${(sizes.reduce((a, b) => a + b, 0) / sizes.length).toFixed(1)}`);
+  }
+
+  // Individual clusters as a table
+  const tableData = clusters.map(c => ({
+    pos: `(${c.centerQ},${c.centerR})`,
+    dist: c.distFromHive,
+    biome: c.biome,
+    type: c.type,
+    size: c.flowers.length,
+    nectar: +c.totalNectar.toFixed(2),
+    pollen: +c.totalPollen.toFixed(2),
+    flowers: c.flowers.map(f => `(${f.q},${f.r})`).join(' '),
+  }));
+  console.table(tableData);
+
+  console.groupEnd();
+
+  // Starter flowers (within revealed area)
+  let starterFlowers = 0;
+  for (const h of hexDisk(0, 0, 6)) {
+    const cell = world.grid.get(h.q, h.r);
+    if (cell && cell.terrain === TerrainType.Flower) starterFlowers++;
+  }
+  console.log(`Starter flowers (radius 6): ${starterFlowers}`);
+
+  // Nearby reachable flowers (within radius 12 — meadow range)
+  let meadowFlowers = 0;
+  for (const cell of world.grid.cells.values()) {
+    if (cell.terrain === TerrainType.Flower && hexDistance(0, 0, cell.q, cell.r) <= 12) {
+      meadowFlowers++;
+    }
+  }
+  console.log(`Meadow-range flowers (radius 12): ${meadowFlowers}`);
+
+  console.log(`Starting bees: ${world.bees.length}`);
+  console.groupEnd();
 }
 
 function spawnStartingBees(world: World): void {

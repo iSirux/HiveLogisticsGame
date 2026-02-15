@@ -1,8 +1,15 @@
 import { Camera } from './camera';
 import { World } from '../world/world';
-import { TerrainType, BeeRole } from '../types';
+import { TerrainType, BeeRole, Biome } from '../types';
 import { hexToPixel } from '../hex/hex';
-import { MINIMAP_WIDTH, MINIMAP_HEIGHT, WORLD_RADIUS, HEX_SIZE } from '../constants';
+import { MINIMAP_WIDTH, MINIMAP_HEIGHT, HEX_SIZE, FLOWER_TYPE_CONFIG } from '../constants';
+
+const BIOME_GRASS_COLORS: Record<Biome, string> = {
+  meadow: '#4a7c3f',
+  forest: '#3a5c30',
+  wetland: '#3a6a4a',
+  wilds: '#5a6a3a',
+};
 
 const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.Grass]: '#4a7c3f',
@@ -16,6 +23,8 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.Brood]: '#c49040',
   [TerrainType.Empty]: '#333333',
   [TerrainType.Waystation]: '#7a6840',
+  [TerrainType.WaxWorks]: '#8a7a40',
+  [TerrainType.NectarStorage]: '#b08830',
 };
 
 const FOG_COLOR = '#15152a';
@@ -73,33 +82,50 @@ export class Minimap {
     this.terrainCanvas = document.createElement('canvas');
     this.terrainCtx = this.terrainCanvas.getContext('2d')!;
 
-    // Compute world pixel bounds from hex grid extent
-    // The world is a hex disk of WORLD_RADIUS. Compute bounding box of hexToPixel for extreme coords.
-    const edge = hexToPixel(WORLD_RADIUS, 0);
-    const edgeY = hexToPixel(0, WORLD_RADIUS);
-    const worldHalfW = Math.abs(edge.x) + HEX_SIZE * 2;
-    const worldHalfH = Math.max(Math.abs(edge.y), Math.abs(edgeY.y)) + HEX_SIZE * 2;
-
+    // Initial layout with default bounds
     this.worldCenterX = 0;
     this.worldCenterY = 0;
-
-    // Fit world into minimap with uniform scale
     this.scale = 1;
     this.offsetX = 0;
     this.offsetY = 0;
-    this.computeLayout(worldHalfW, worldHalfH);
 
     this.handleResize();
     this.bindEvents();
   }
 
-  private computeLayout(worldHalfW: number, worldHalfH: number) {
+  private computeLayoutFromWorld(world: World) {
+    // Compute bounds from explored cells
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
+    for (const cell of world.grid.cells.values()) {
+      if (!cell.explored && !world.debugFogDisabled) continue;
+      const { x, y } = hexToPixel(cell.q, cell.r);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+
+    if (minX === Infinity) {
+      // Fallback: small area around origin
+      minX = -HEX_SIZE * 10;
+      maxX = HEX_SIZE * 10;
+      minY = -HEX_SIZE * 10;
+      maxY = HEX_SIZE * 10;
+    }
+
+    const worldHalfW = (maxX - minX) / 2 + HEX_SIZE * 2;
+    const worldHalfH = (maxY - minY) / 2 + HEX_SIZE * 2;
+    this.worldCenterX = (minX + maxX) / 2;
+    this.worldCenterY = (minY + maxY) / 2;
+
     const dpr = window.devicePixelRatio || 1;
     const cw = MINIMAP_WIDTH * dpr;
     const ch = MINIMAP_HEIGHT * dpr;
     const scaleX = cw / (worldHalfW * 2);
     const scaleY = ch / (worldHalfH * 2);
-    this.scale = Math.min(scaleX, scaleY) * 0.9; // 90% to add padding
+    this.scale = Math.min(scaleX, scaleY) * 0.9;
     this.offsetX = cw / 2 - this.worldCenterX * this.scale;
     this.offsetY = ch / 2 - this.worldCenterY * this.scale;
   }
@@ -110,13 +136,6 @@ export class Minimap {
     this.canvas.height = MINIMAP_HEIGHT * dpr;
     this.terrainCanvas.width = this.canvas.width;
     this.terrainCanvas.height = this.canvas.height;
-
-    // Recompute layout
-    const edge = hexToPixel(WORLD_RADIUS, 0);
-    const edgeY = hexToPixel(0, WORLD_RADIUS);
-    const worldHalfW = Math.abs(edge.x) + HEX_SIZE * 2;
-    const worldHalfH = Math.max(Math.abs(edge.y), Math.abs(edgeY.y)) + HEX_SIZE * 2;
-    this.computeLayout(worldHalfW, worldHalfH);
 
     // Force terrain redraw
     this.cachedTerrainVersion = -1;
@@ -142,7 +161,6 @@ export class Minimap {
     this.canvas.addEventListener('mouseleave', () => {
       this.dragging = false;
     });
-    // Prevent context menu on minimap
     this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // Touch events
@@ -178,7 +196,6 @@ export class Minimap {
     const dpr = window.devicePixelRatio || 1;
     const mx = cx * dpr;
     const my = cy * dpr;
-    // Convert minimap pixel to world coords
     const wx = (mx - this.offsetX) / this.scale;
     const wy = (my - this.offsetY) / this.scale;
     this.camera.x = wx;
@@ -193,6 +210,9 @@ export class Minimap {
   }
 
   private rebuildTerrain(world: World) {
+    // Recompute layout based on current explored bounds
+    this.computeLayoutFromWorld(world);
+
     const ctx = this.terrainCtx;
     const w = this.terrainCanvas.width;
     const h = this.terrainCanvas.height;
@@ -204,9 +224,22 @@ export class Minimap {
       const { x: px, y: py } = hexToPixel(cell.q, cell.r);
       const { mx, my } = this.worldToMinimap(px, py);
 
+      // Skip cells far outside minimap canvas
+      if (mx < -dotR || mx > w + dotR || my < -dotR || my > h + dotR) continue;
+
       ctx.beginPath();
       ctx.arc(mx, my, dotR, 0, Math.PI * 2);
-      ctx.fillStyle = (cell.explored || world.debugFogDisabled) ? TERRAIN_COLORS[cell.terrain] : FOG_COLOR;
+      let color: string;
+      if (!cell.explored && !world.debugFogDisabled) {
+        color = FOG_COLOR;
+      } else if (cell.terrain === TerrainType.Flower) {
+        color = FLOWER_TYPE_CONFIG[cell.flowerType].color;
+      } else if (cell.terrain === TerrainType.Grass) {
+        color = BIOME_GRASS_COLORS[cell.biome] || BIOME_GRASS_COLORS.meadow;
+      } else {
+        color = TERRAIN_COLORS[cell.terrain];
+      }
+      ctx.fillStyle = color;
       ctx.fill();
     }
   }
