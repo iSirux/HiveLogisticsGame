@@ -11,6 +11,9 @@ export const WORLD_RADIUS = 30; // hex radius of generated world
 export const FLOWER_CLUSTER_COUNT = 1;
 export const FOREST_FLOWER_CLUSTER_COUNT = 3;
 export const FLOWER_CLUSTER_RADIUS = 1; // center + ring-1
+export const MEADOW_FLOWERS_PER_CLUSTER = 3;
+export const FOREST_FLOWERS_MIN = 4;
+export const FOREST_FLOWERS_MAX = 6;
 export const FLOWER_MIN_DISTANCE = 4; // min dist from origin for flower clusters
 export const FLOWER_MAX_DISTANCE = 12;
 export const INITIAL_NECTAR_MIN = 0.5;
@@ -27,9 +30,10 @@ export const TREE_CLUSTER_COUNT = 4;
 export const WATER_CLUSTER_COUNT = 2;
 
 // === Bees ===
-export const STARTING_FORAGERS = 3;
+export const STARTING_FORAGERS = 4;
 export const STARTING_NURSES = 1;
 export const STARTING_SCOUTS = 1;
+export const STARTING_HAULERS = 1;
 export const STARTING_BUILDERS = 1;
 export const BEE_SPEED = 0.5; // progress per tick (1.0 = advance one hex)
 export const HARVEST_TICKS = 55; // ticks to harvest a flower
@@ -62,7 +66,29 @@ export const BUILD_COSTS: Record<string, { wax: number; honey: number }> = {
   processing: { wax: 8, honey: 0 },
   brood: { wax: 12, honey: 5 },
   pollen_storage: { wax: 8, honey: 0 },
+  waystation: { wax: 6, honey: 0 },
 };
+
+// === Bee Energy ===
+export const ENERGY_DRAIN_FLYING = 0.003;
+export const ENERGY_DRAIN_WORKING = 0.002;
+export const ENERGY_DRAIN_IDLE = 0.0005;
+export const ENERGY_HUNGER_THRESHOLD = 0.3;
+export const ENERGY_RESTORE_PER_TICK = 0.05;
+export const HONEY_PER_EAT_TICK = 0.1;
+export const EAT_TICKS = 10;
+
+// === Bee Lifespan ===
+export const BEE_MEAN_LIFESPAN = 60000;
+export const BEE_LIFESPAN_VARIANCE = 15000;
+
+// === Waystation ===
+export const WAYSTATION_NECTAR_CAPACITY = 1.5;
+export const WAYSTATION_POLLEN_CAPACITY = 1.0;
+
+// === Hauler ===
+export const HAULER_CARRY_CAPACITY = 0.4;
+export const HAULER_PICKUP_TICKS = 5;
 
 // === Pheromones ===
 export const PHEROMONE_PAINT_AMOUNT = 0.3;

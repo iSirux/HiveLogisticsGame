@@ -16,6 +16,7 @@ export enum TerrainType {
   Processing = 'processing',
   Brood = 'brood',
   Empty = 'empty',
+  Waystation = 'waystation',
 }
 
 export interface HexCell {
@@ -49,6 +50,7 @@ export enum BeeRole {
   Forager = 'forager',
   Nurse = 'nurse',
   Scout = 'scout',
+  Hauler = 'hauler',
   Builder = 'builder',
 }
 
@@ -66,6 +68,12 @@ export enum BeeState {
   Processing = 'processing',
   // Builder
   IdleAtHive = 'idle_at_hive',
+  // Energy states
+  Hungry = 'hungry',
+  Eating = 'eating',
+  // Hauler states
+  FlyingToWaystation = 'flying_to_waystation',
+  PickingUp = 'picking_up',
   // Scout states
   FlyingToExplore = 'flying_to_explore',
   Exploring = 'exploring',
@@ -96,6 +104,10 @@ export interface BeeEntity {
   danceTicks: number;
   // Timers
   stateTimer: number; // ticks remaining in current state action
+  // Energy & lifespan
+  energy: number;    // 0-1
+  age: number;       // ticks lived
+  maxAge: number;    // ticks until death
   // Visual
   wingPhase: number;
 }
@@ -107,7 +119,7 @@ export enum InputMode {
   Pheromone = 'pheromone',
 }
 
-export type BuildType = 'honey_storage' | 'processing' | 'brood' | 'pollen_storage';
+export type BuildType = 'honey_storage' | 'processing' | 'brood' | 'pollen_storage' | 'waystation';
 
 export interface InputState {
   mode: InputMode;
@@ -134,7 +146,8 @@ export interface WorldSettings {
   foragerRatio: number;  // 0-1
   nurseRatio: number;    // 0-1
   scoutRatio: number;    // 0-1
-  // builder = 1 - forager - nurse - scout
+  haulerRatio: number;   // 0-1
+  // builder = 1 - forager - nurse - scout - hauler
   speedMultiplier: number; // 0, 1, 2, 3
   paused: boolean;
 }

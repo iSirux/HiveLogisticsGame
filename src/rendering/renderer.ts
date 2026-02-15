@@ -83,6 +83,18 @@ export class Renderer {
 
   getValidBuildHexes(world: World): Set<string> {
     const valid = new Set<string>();
+
+    // Waystations can be placed on any explored grass hex
+    if (world.inputState.buildType === 'waystation') {
+      for (const cell of world.grid.cells.values()) {
+        if (cell.explored && cell.terrain === 'grass') {
+          valid.add(hexKey(cell.q, cell.r));
+        }
+      }
+      return valid;
+    }
+
+    // Other buildings must be adjacent to existing hive cells
     const hive = world.grid.hiveCells();
     for (const cell of hive) {
       const neighbors = [

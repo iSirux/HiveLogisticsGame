@@ -10,6 +10,7 @@ import { updateHive } from './systems/hiveSystem';
 import { updatePheromones } from './systems/pheromoneSystem';
 import { updateDayNight } from './systems/dayNightSystem';
 import { updateExploration } from './systems/explorationSystem';
+import { updateLifecycle } from './systems/lifecycleSystem';
 import { Minimap } from './rendering/minimap';
 import { SIM_TICK_MS, MAX_TICKS_PER_FRAME } from './constants';
 
@@ -111,6 +112,7 @@ export class Game {
 
     // Run systems in order
     updateForaging(this.world);
+    updateLifecycle(this.world);
     updateMovement(this.world);
     updateHive(this.world);
     updatePheromones(this.world);

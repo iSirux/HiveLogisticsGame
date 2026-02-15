@@ -1,11 +1,12 @@
 import { BeeEntity, BeeRole, BeeState } from '../types';
 import { Camera } from './camera';
-import { BEE_BODY_RADIUS, BEE_DOT_ZOOM_THRESHOLD } from '../constants';
+import { BEE_BODY_RADIUS, BEE_DOT_ZOOM_THRESHOLD, ENERGY_HUNGER_THRESHOLD } from '../constants';
 
 const ROLE_COLORS: Record<BeeRole, string> = {
   [BeeRole.Forager]: '#f0c830',
   [BeeRole.Nurse]:   '#e8e0d0',
   [BeeRole.Scout]:   '#60b0e8',
+  [BeeRole.Hauler]:  '#a080d0',
   [BeeRole.Builder]: '#d0a050',
 };
 
@@ -96,6 +97,15 @@ function drawBee(ctx: CanvasRenderingContext2D, bee: BeeEntity, px: number, py: 
     ctx.beginPath();
     ctx.arc(px, py + r * 1.6, 3, 0, Math.PI * 2);
     ctx.fillStyle = '#e0c020';
+    ctx.fill();
+  }
+
+  // Hunger indicator: pulsing red circle when low energy
+  if (bee.energy < ENERGY_HUNGER_THRESHOLD) {
+    const pulse = 0.4 + Math.sin(bee.wingPhase * 3) * 0.3;
+    ctx.beginPath();
+    ctx.arc(px, py - r * 2, r * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255, 60, 60, ${pulse})`;
     ctx.fill();
   }
 }

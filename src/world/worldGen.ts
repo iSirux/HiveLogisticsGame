@@ -5,9 +5,11 @@ import {
   WORLD_RADIUS, FLOWER_CLUSTER_COUNT, FOREST_FLOWER_CLUSTER_COUNT, FLOWER_MIN_DISTANCE,
   INITIAL_NECTAR_MIN, INITIAL_NECTAR_MAX,
   INITIAL_POLLEN_MIN, INITIAL_POLLEN_MAX,
-  STARTING_FORAGERS, STARTING_NURSES, STARTING_BUILDERS, STARTING_SCOUTS,
+  STARTING_FORAGERS, STARTING_NURSES, STARTING_BUILDERS, STARTING_SCOUTS, STARTING_HAULERS,
   BIOME_MEADOW_RADIUS, BIOME_FOREST_RADIUS,
   TREE_CLUSTER_COUNT, WATER_CLUSTER_COUNT,
+  BEE_MEAN_LIFESPAN, BEE_LIFESPAN_VARIANCE,
+  MEADOW_FLOWERS_PER_CLUSTER, FOREST_FLOWERS_MIN, FOREST_FLOWERS_MAX,
 } from '../constants';
 
 const FLOWER_COLORS = ['#ff69b4', '#ff6090', '#e060e0', '#c070ff', '#ff8040', '#ff5050'];
@@ -55,20 +57,26 @@ function placeHive(world: World): void {
   for (let i = 0; i < ring.length; i++) {
     const cell = world.grid.get(ring[i].q, ring[i].r)!;
     cell.terrain = assignments[i];
+    // Seed honey storage with starting honey so bees can eat before the pipeline runs
+    if (assignments[i] === TerrainType.HoneyStorage) {
+      cell.honeyStored = 3;
+      world.resources.honey += 3;
+    }
   }
 }
 
 function placeFlowers(world: World): void {
   const placed: { q: number; r: number }[] = [];
 
-  // Meadow flowers
+  // Meadow flowers (small clusters near hive to encourage expansion)
   for (let i = 0; i < FLOWER_CLUSTER_COUNT; i++) {
-    placeFlowerCluster(world, placed, FLOWER_MIN_DISTANCE, BIOME_MEADOW_RADIUS, i);
+    placeFlowerCluster(world, placed, FLOWER_MIN_DISTANCE, BIOME_MEADOW_RADIUS, i, MEADOW_FLOWERS_PER_CLUSTER);
   }
 
-  // Forest flowers (sparser, further out)
+  // Forest flowers (larger clusters further out as reward for expanding)
   for (let i = 0; i < FOREST_FLOWER_CLUSTER_COUNT; i++) {
-    placeFlowerCluster(world, placed, BIOME_MEADOW_RADIUS, BIOME_FOREST_RADIUS, FLOWER_CLUSTER_COUNT + i);
+    const count = FOREST_FLOWERS_MIN + Math.floor(Math.random() * (FOREST_FLOWERS_MAX - FOREST_FLOWERS_MIN + 1));
+    placeFlowerCluster(world, placed, BIOME_MEADOW_RADIUS, BIOME_FOREST_RADIUS, FLOWER_CLUSTER_COUNT + i, count);
   }
 }
 
@@ -78,6 +86,7 @@ function placeFlowerCluster(
   minDist: number,
   maxDist: number,
   colorIndex: number,
+  flowerCount: number,
 ): void {
   let attempts = 0;
   while (attempts < 100) {
@@ -97,17 +106,28 @@ function placeFlowerCluster(
     if (tooClose) continue;
 
     const color = FLOWER_COLORS[colorIndex % FLOWER_COLORS.length];
-    const clusterHexes = [...hexRing(fq, fr, 0), ...hexRing(fq, fr, 1)];
-    for (const h of clusterHexes) {
-      const cell = world.grid.get(h.q, h.r);
-      if (cell && cell.terrain === TerrainType.Grass) {
-        cell.terrain = TerrainType.Flower;
-        cell.nectarMax = INITIAL_NECTAR_MIN + Math.random() * (INITIAL_NECTAR_MAX - INITIAL_NECTAR_MIN);
-        cell.nectarAmount = cell.nectarMax;
-        cell.pollenMax = INITIAL_POLLEN_MIN + Math.random() * (INITIAL_POLLEN_MAX - INITIAL_POLLEN_MIN);
-        cell.pollenAmount = cell.pollenMax;
-        cell.flowerColor = color;
-      }
+    // Gather candidate hexes (center + ring-1), filter to placeable grass
+    const candidates = [...hexRing(fq, fr, 0), ...hexRing(fq, fr, 1)]
+      .filter(h => {
+        const cell = world.grid.get(h.q, h.r);
+        return cell && cell.terrain === TerrainType.Grass;
+      });
+
+    // Shuffle and pick up to flowerCount hexes
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+    const selected = candidates.slice(0, flowerCount);
+
+    for (const h of selected) {
+      const cell = world.grid.get(h.q, h.r)!;
+      cell.terrain = TerrainType.Flower;
+      cell.nectarMax = INITIAL_NECTAR_MIN + Math.random() * (INITIAL_NECTAR_MAX - INITIAL_NECTAR_MIN);
+      cell.nectarAmount = cell.nectarMax;
+      cell.pollenMax = INITIAL_POLLEN_MIN + Math.random() * (INITIAL_POLLEN_MAX - INITIAL_POLLEN_MIN);
+      cell.pollenAmount = cell.pollenMax;
+      cell.flowerColor = color;
     }
 
     placed.push({ q: fq, r: fr });
@@ -205,17 +225,18 @@ function spawnStartingBees(world: World): void {
     { role: BeeRole.Forager, count: STARTING_FORAGERS },
     { role: BeeRole.Nurse, count: STARTING_NURSES },
     { role: BeeRole.Scout, count: STARTING_SCOUTS },
+    { role: BeeRole.Hauler, count: STARTING_HAULERS },
     { role: BeeRole.Builder, count: STARTING_BUILDERS },
   ];
 
   for (const { role, count } of roles) {
     for (let i = 0; i < count; i++) {
-      createBee(world, role, 0, 0);
+      createBee(world, role, 0, 0, true);
     }
   }
 }
 
-export function createBee(world: World, role: BeeRole, q: number, r: number): BeeEntity {
+export function createBee(world: World, role: BeeRole, q: number, r: number, randomAge = false): BeeEntity {
   const { x, y } = hexToPixel(q, r);
   const ox = (Math.random() - 0.5) * 10;
   const oy = (Math.random() - 0.5) * 10;
@@ -236,6 +257,9 @@ export function createBee(world: World, role: BeeRole, q: number, r: number): Be
     explorationTarget: null,
     danceTicks: 0,
     stateTimer: 0,
+    energy: 1.0,
+    age: randomAge ? Math.floor(Math.random() * 1000) : 0,
+    maxAge: BEE_MEAN_LIFESPAN + Math.floor((Math.random() - 0.5) * 2 * BEE_LIFESPAN_VARIANCE),
     wingPhase: Math.random() * Math.PI * 2,
   };
   world.bees.push(bee);

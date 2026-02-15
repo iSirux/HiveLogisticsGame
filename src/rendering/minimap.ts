@@ -15,6 +15,7 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.Processing]: '#b89030',
   [TerrainType.Brood]: '#c49040',
   [TerrainType.Empty]: '#333333',
+  [TerrainType.Waystation]: '#7a6840',
 };
 
 const FOG_COLOR = '#15152a';
@@ -23,6 +24,7 @@ const BEE_COLORS: Record<BeeRole, string> = {
   [BeeRole.Forager]: '#ffd700',
   [BeeRole.Nurse]: '#ffffff',
   [BeeRole.Scout]: '#5599ff',
+  [BeeRole.Hauler]: '#a080d0',
   [BeeRole.Builder]: '#d2b48c',
 };
 
@@ -204,7 +206,7 @@ export class Minimap {
 
       ctx.beginPath();
       ctx.arc(mx, my, dotR, 0, Math.PI * 2);
-      ctx.fillStyle = cell.explored ? TERRAIN_COLORS[cell.terrain] : FOG_COLOR;
+      ctx.fillStyle = (cell.explored || world.debugFogDisabled) ? TERRAIN_COLORS[cell.terrain] : FOG_COLOR;
       ctx.fill();
     }
   }

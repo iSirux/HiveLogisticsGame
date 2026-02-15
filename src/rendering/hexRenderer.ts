@@ -1,7 +1,7 @@
 import { HexCell, TerrainType } from '../types';
 import { hexToPixel, hexCorners } from '../hex/hex';
 import { Camera } from './camera';
-import { HEX_SIZE } from '../constants';
+import { HEX_SIZE, WAYSTATION_NECTAR_CAPACITY, WAYSTATION_POLLEN_CAPACITY } from '../constants';
 import { World } from '../world/world';
 
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -15,6 +15,7 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.Processing]: '#7a6030',
   [TerrainType.Brood]: '#8c6a7a',
   [TerrainType.Empty]: '#4a4440',
+  [TerrainType.Waystation]: '#7a6840',
 };
 
 const FOG_COLOR = '#15152a';
@@ -34,8 +35,8 @@ export function renderHexGrid(
     const { x: px, y: py } = hexToPixel(cell.q, cell.r);
     if (!camera.isVisible(px, py)) continue;
 
-    // Unexplored cells: render as dark fog
-    if (!cell.explored) {
+    // Unexplored cells: render as dark fog (unless debug fog disabled)
+    if (!cell.explored && !world.debugFogDisabled) {
       drawFogHex(ctx, px, py);
       continue;
     }
@@ -78,6 +79,9 @@ export function renderHexGrid(
     if (cell.terrain === TerrainType.Brood) {
       drawBroodCell(ctx, px, py, cell.broodActive, cell.broodProgress);
     }
+    if (cell.terrain === TerrainType.Waystation) {
+      drawWaystation(ctx, px, py, cell);
+    }
     if (cell.terrain === TerrainType.Empty) {
       drawEmptyCell(ctx, px, py);
     }
@@ -95,10 +99,10 @@ export function renderHexGrid(
     }
   }
 
-  // Hover highlight (only on explored hexes)
+  // Hover highlight (only on explored hexes, or all when fog disabled)
   if (hoveredHex) {
     const hovCell = world.grid.get(hoveredHex.q, hoveredHex.r);
-    if (hovCell && hovCell.explored) {
+    if (hovCell && (hovCell.explored || world.debugFogDisabled)) {
       const { x: hx, y: hy } = hexToPixel(hoveredHex.q, hoveredHex.r);
       drawHexOutline(ctx, hx, hy, 'rgba(255, 255, 255, 0.6)', 2);
     }
@@ -107,7 +111,7 @@ export function renderHexGrid(
   // Selected highlight
   if (selectedHex) {
     const selCell = world.grid.get(selectedHex.q, selectedHex.r);
-    if (selCell && selCell.explored) {
+    if (selCell && (selCell.explored || world.debugFogDisabled)) {
       const { x: sx, y: sy } = hexToPixel(selectedHex.q, selectedHex.r);
       drawHexOutline(ctx, sx, sy, 'rgba(255, 220, 80, 0.8)', 3);
     }
@@ -437,6 +441,61 @@ function drawBroodCell(ctx: CanvasRenderingContext2D, cx: number, cy: number, br
       ctx.lineWidth = 2.5;
       ctx.stroke();
     }
+  }
+}
+
+function drawWaystation(ctx: CanvasRenderingContext2D, cx: number, cy: number, cell: HexCell) {
+  // Small hex platform
+  const r = HEX_SIZE * 0.35;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = Math.PI / 3 * i;
+    const hx = cx + Math.cos(angle) * r;
+    const hy = cy + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#9a8850';
+  ctx.fill();
+  ctx.strokeStyle = '#c0a860';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Relay arrow symbol (two arrows pointing in/out)
+  ctx.strokeStyle = '#e0c870';
+  ctx.lineWidth = 2;
+  // Arrow right
+  ctx.beginPath();
+  ctx.moveTo(cx - 4, cy);
+  ctx.lineTo(cx + 4, cy);
+  ctx.lineTo(cx + 1, cy - 3);
+  ctx.moveTo(cx + 4, cy);
+  ctx.lineTo(cx + 1, cy + 3);
+  ctx.stroke();
+
+  // Storage bars (nectar + pollen)
+  const barW = HEX_SIZE * 0.7;
+  const barH = 3;
+  const nectarFill = Math.min(cell.nectarStored / WAYSTATION_NECTAR_CAPACITY, 1);
+  const pollenFill = Math.min(cell.pollenStored / WAYSTATION_POLLEN_CAPACITY, 1);
+
+  // Nectar bar
+  const barY1 = cy + HEX_SIZE * 0.32;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(cx - barW / 2, barY1, barW, barH);
+  if (nectarFill > 0) {
+    ctx.fillStyle = '#80d040';
+    ctx.fillRect(cx - barW / 2, barY1, barW * nectarFill, barH);
+  }
+
+  // Pollen bar
+  const barY2 = barY1 + barH + 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(cx - barW / 2, barY2, barW, barH);
+  if (pollenFill > 0) {
+    ctx.fillStyle = '#e0c020';
+    ctx.fillRect(cx - barW / 2, barY2, barW * pollenFill, barH);
   }
 }
 

@@ -10,6 +10,7 @@ export class World {
     foragerRatio: 0.55,
     nurseRatio: 0.25,
     scoutRatio: 0.1,
+    haulerRatio: 0,
     speedMultiplier: 1,
     paused: false,
   };
@@ -32,6 +33,12 @@ export class World {
   // Version counters for minimap cache invalidation
   terrainVersion = 0;
   explorationVersion = 0;
+
+  // Debug flags
+  debugFogDisabled = false;
+
+  // Death tracking
+  deathCount = 0;
 
   // Sound events queue (consumed by audio manager each frame)
   pendingSounds: string[] = [];

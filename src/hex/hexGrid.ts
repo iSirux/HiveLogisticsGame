@@ -48,6 +48,11 @@ export class HexGrid {
     return this.allCells().filter(c => c.terrain === terrain);
   }
 
+  /** Get all waystation cells */
+  waystationCells(): HexCell[] {
+    return this.allCells().filter(c => c.terrain === TerrainType.Waystation);
+  }
+
   /** Get all hive cells (entrance + storage + processing + brood + pollen storage) */
   hiveCells(): HexCell[] {
     return this.allCells().filter(c =>

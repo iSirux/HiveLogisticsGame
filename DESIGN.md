@@ -2,7 +2,7 @@
 
 ## Overview
 
-A logistics management game where you guide a bee colony on an infinite hex grid. Direct autonomous bee workers through pheromone-based controls, manage resource supply chains, expand your hive, and survive seasonal pressures. Built as a web app prioritizing fast iteration, procedural audio/visuals, and emergent gameplay.
+A logistics management game where you guide a bee colony on an infinite hex grid. Direct autonomous bee workers through pheromone-based controls, manage resource supply chains, and expand your hive. Built as a web app prioritizing fast iteration, procedural audio/visuals, and emergent gameplay.
 
 ---
 
@@ -35,22 +35,22 @@ Scout → Discover → Assign → Extract → Transport → Process → Build �
 
 ### Raw Resources (gathered from the world)
 
-| Resource | Source | Gathering |
-|----------|--------|-----------|
-| Nectar | Flowers | Foragers visit blooming flower patches |
-| Pollen | Flowers | Collected alongside nectar, separate carry capacity |
-| Resin | Trees | Slower extraction, requires dedicated foragers |
-| Water | Ponds/streams | Carried in small quantities, evaporates over time |
+| Resource | Source        | Gathering                                           |
+| -------- | ------------- | --------------------------------------------------- |
+| Nectar   | Flowers       | Foragers visit blooming flower patches              |
+| Pollen   | Flowers       | Collected alongside nectar, separate carry capacity |
+| Resin    | Trees         | Slower extraction, requires dedicated foragers      |
+| Water    | Ponds/streams | Carried in small quantities, evaporates over time   |
 
 ### Processed Resources (produced inside the hive)
 
-| Resource | Input | Process | Used For |
-|----------|-------|---------|----------|
-| Honey | Nectar | Evaporation in storage cells | Universal currency, food, energy |
-| Bee Bread | Pollen | Fermentation in comb cells | Larvae feeding, bee production |
-| Propolis | Resin | Mixing by builders | Hive defense, sealing, repairs |
-| Wax | Honey (self-produced) | Worker metabolism | Building new comb cells |
-| Royal Jelly | Honey + Pollen | Nurse bee production | Queen upgrades, special units |
+| Resource    | Input                 | Process                      | Used For                         |
+| ----------- | --------------------- | ---------------------------- | -------------------------------- |
+| Honey       | Nectar                | Evaporation in storage cells | Universal currency, food, energy |
+| Bee Bread   | Pollen                | Fermentation in comb cells   | Larvae feeding, bee production   |
+| Propolis    | Resin                 | Mixing by builders           | Hive defense, sealing, repairs   |
+| Wax         | Honey (self-produced) | Worker metabolism            | Building new comb cells          |
+| Royal Jelly | Honey + Pollen        | Nurse bee production         | Queen upgrades, special units    |
 
 ### Resource Properties
 
@@ -68,15 +68,15 @@ Infinite hex grid generated procedurally in chunks. The hive starts at the cente
 
 ### Hex Types
 
-| Type | Description |
-|------|-------------|
-| **Hive** | Player-built comb cells (interior) |
-| **Flowers** | Resource patches — bloom, deplete, regrow seasonally |
-| **Trees** | Resin sources — slow yield but persistent |
-| **Water** | Ponds, streams — water collection |
-| **Grass** | Empty, traversable |
-| **Rock** | Impassable obstacle |
-| **Danger** | Pesticide zones — high yield but damages bees |
+| Type        | Description                                          |
+| ----------- | ---------------------------------------------------- |
+| **Hive**    | Player-built comb cells (interior)                   |
+| **Flowers** | Resource patches — bloom and deplete, regrow over time |
+| **Trees**   | Resin sources — slow yield but persistent            |
+| **Water**   | Ponds, streams — water collection                    |
+| **Grass**   | Empty, traversable                                   |
+| **Rock**    | Impassable obstacle                                  |
+| **Danger**  | Pesticide zones — high yield but damages bees        |
 
 ### Biome Rings
 
@@ -98,14 +98,14 @@ Hexes beyond explored range are hidden. Scouts reveal them. Revealed hexes stay 
 
 ### Roles
 
-| Role | Function | Priority |
-|------|----------|----------|
-| **Scout** | Explores unknown hexes, discovers resource patches | Low count, high value |
-| **Forager** | Flies to patches, extracts raw resources, carries back | Bulk of workforce |
-| **Hauler** | Relay transport — carries between depots | Unlocked later |
-| **Nurse** | Tends larvae, feeds brood, produces royal jelly | Scales with brood size |
-| **Builder** | Constructs new comb cells, repairs damage | On-demand |
-| **Guard** | Defends hive entrance and patrol zones | Scales with threats |
+| Role        | Function                                               | Priority               |
+| ----------- | ------------------------------------------------------ | ---------------------- |
+| **Scout**   | Explores unknown hexes, discovers resource patches     | Low count, high value  |
+| **Forager** | Flies to patches, extracts raw resources, carries back | Bulk of workforce      |
+| **Hauler**  | Relay transport — carries between depots               | Unlocked later         |
+| **Nurse**   | Tends larvae, feeds brood, produces royal jelly        | Scales with brood size |
+| **Builder** | Constructs new comb cells, repairs damage              | On-demand              |
+| **Guard**   | Defends hive entrance and patrol zones                 | Scales with threats    |
 
 ### Bee Properties
 
@@ -125,6 +125,7 @@ Bees are **autonomous agents** that make local decisions based on:
 4. **Need** — hungry bees eat, tired bees rest, hive needs trigger role switches.
 
 **Player controls are indirect:**
+
 - Paint pheromone attract/repel zones on the hex grid.
 - Set global role allocation percentages.
 - Designate priority resource patches (stronger pheromone signal).
@@ -141,15 +142,15 @@ The hive is built on the same hex grid as the world. Each hex inside the hive is
 
 ### Cell Types
 
-| Cell | Function |
-|------|----------|
-| **Honey Storage** | Stores processed honey |
-| **Pollen Storage** | Stores pollen / bee bread |
-| **Brood Cell** | Egg → larva → pupa → adult bee |
-| **Processing Cell** | Converts nectar → honey (evaporation) |
-| **Royal Chamber** | Queen resides here, lays eggs in adjacent brood cells |
-| **Entrance** | Hive entry/exit point, guards station here |
-| **Wax Cap** | Sealed storage (long-term preservation) |
+| Cell                | Function                                              |
+| ------------------- | ----------------------------------------------------- |
+| **Honey Storage**   | Stores processed honey                                |
+| **Pollen Storage**  | Stores pollen / bee bread                             |
+| **Brood Cell**      | Egg → larva → pupa → adult bee                        |
+| **Processing Cell** | Converts nectar → honey (evaporation)                 |
+| **Royal Chamber**   | Queen resides here, lays eggs in adjacent brood cells |
+| **Entrance**        | Hive entry/exit point, guards station here            |
+| **Wax Cap**         | Sealed storage (long-term preservation)               |
 
 ### Layout Matters
 
@@ -165,39 +166,28 @@ The hive is built on the same hex grid as the world. Each hex inside the hive is
 
 ### Predators
 
-| Threat | Behavior |
-|--------|----------|
-| **Wasps** | Raid foragers on routes, steal from unguarded patches |
-| **Hornets** | Assault hive entrance, kill bees, steal honey |
-| **Birds** | Pick off isolated foragers in open hexes |
+| Threat      | Behavior                                              |
+| ----------- | ----------------------------------------------------- |
+| **Wasps**   | Raid foragers on routes, steal from unguarded patches |
+| **Hornets** | Assault hive entrance, kill bees, steal honey         |
+| **Birds**   | Pick off isolated foragers in open hexes              |
 
 ### Environmental
 
-| Threat | Effect |
-|--------|--------|
-| **Rain** | Grounds all foragers, reduces visibility |
-| **Cold snap** | Bees cluster for warmth, no outdoor activity |
-| **Drought** | Water sources dry up, flowers wilt early |
-| **Pesticide drift** | Random hexes become toxic for a period |
+| Threat              | Effect                                       |
+| ------------------- | -------------------------------------------- |
+| **Rain**            | Grounds all foragers, reduces visibility     |
+| **Cold snap**       | Bees cluster for warmth, no outdoor activity |
+| **Drought**         | Water sources dry up, flowers wilt early     |
+| **Pesticide drift** | Random hexes become toxic for a period       |
 
 ### Disease
 
-| Threat | Effect |
-|--------|--------|
-| **Varroa mites** | Spread through brood, weaken new bees |
-| **Nosema** | Reduces forager efficiency, spreads via shared food |
-| **Foulbrood** | Kills larvae, must destroy infected comb cells |
-
-### Seasonal Cycle
-
-The game runs on a seasonal clock:
-
-- **Spring** — flowers bloom, colony rebuilds, queen ramps up laying.
-- **Summer** — peak foraging, maximum expansion, predator pressure.
-- **Autumn** — flowers fade, must stockpile honey for winter, evict drones.
-- **Winter** — no foraging, colony survives on stores, bees cluster for warmth.
-
-**Win/loss condition:** survive through winters. Each winter is harder. How many years can you sustain?
+| Threat           | Effect                                              |
+| ---------------- | --------------------------------------------------- |
+| **Varroa mites** | Spread through brood, weaken new bees               |
+| **Nosema**       | Reduces forager efficiency, spreads via shared food |
+| **Foulbrood**    | Kills larvae, must destroy infected comb cells      |
 
 ---
 
@@ -237,22 +227,21 @@ Multiple conversion steps = more things that can bottleneck.
 
 ## Progression
 
-### Early Game (Year 1, Spring)
+### Early Game
 
 - Small hive, ~20 bees, queen + starter comb.
 - Discover nearby flowers, set up first foraging routes.
 - Build basic honey storage, first brood cycle.
 - Learn pheromone controls.
 
-### Mid Game (Year 1-2)
+### Mid Game
 
 - Expand to multiple resource patches across biomes.
 - Set up relay depots for distant patches.
 - Manage role allocation as colony grows to hundreds of bees.
 - First predator encounters, build defenses.
-- Survive first winter.
 
-### Late Game (Year 3+)
+### Late Game
 
 - Massive colony, thousands of bees, complex supply networks.
 - Multiple satellite hives.
@@ -292,7 +281,7 @@ Multiple conversion steps = more things that can bottleneck.
 
 - Resource counters (honey, pollen, resin, water, wax).
 - Population counter with role breakdown.
-- Season/time indicator.
+- Time-of-day indicator.
 - Minimap showing explored territory.
 - Overlay toggles: pheromone density, traffic heat map, resource heatmap.
 
@@ -322,7 +311,7 @@ Multiple conversion steps = more things that can bottleneck.
 - **Rain** — filtered noise, muffles other sounds.
 - **Building** — crunchy wax sounds.
 - **Alert** — distinct tone for threats, starvation warnings.
-- **Seasonal ambience** — birdsong in spring, crickets in summer, wind in autumn, silence in winter.
+- **Ambience** — background environmental sounds shifting with time of day.
 
 ---
 
@@ -347,7 +336,7 @@ Multiple conversion steps = more things that can bottleneck.
 
 - **Agent simulation at scale** — spatial hashing, LOD for off-screen bees.
 - **Infinite hex grid** — chunk-based loading/generation, efficient storage.
-- **Pathfinding** — A* on hex grid with pheromone-weighted costs, cached paths.
+- **Pathfinding** — A\* on hex grid with pheromone-weighted costs, cached paths.
 - **Procedural audio** — real-time synthesis without lag spikes.
 
 ---
@@ -367,7 +356,7 @@ The minimum playable version to validate the core loop:
 9. Role allocation slider (forager vs nurse vs builder).
 10. Simple day cycle (bees return at night).
 
-**Cut from MVP:** seasons, threats, disease, depots, fog of war, rival hives, upgrades.
+**Cut from MVP:** threats, disease, depots, fog of war, rival hives, upgrades.
 
 ---
 
@@ -377,4 +366,4 @@ The minimum playable version to validate the core loop:
 - **Procedural generation seed** — shareable seeds for challenge runs?
 - **Difficulty modes** — or purely emergent difficulty from expansion choices?
 - **Mobile support** — touch controls viable for pheromone painting?
-- **Narrative** — purely sandbox, or light story/objectives per season?
+- **Narrative** — purely sandbox, or light story/objectives?

@@ -237,10 +237,12 @@ export class InputHandler {
       pollen_storage: TerrainType.PollenStorage,
       processing: TerrainType.Processing,
       brood: TerrainType.Brood,
+      waystation: TerrainType.Waystation,
     };
     cell.terrain = terrainMap[buildType];
     cell.honeyStored = 0;
     cell.nectarStored = 0;
+    cell.pollenStored = 0;
     cell.processingProgress = 0;
     cell.broodProgress = 0;
     cell.broodActive = false;

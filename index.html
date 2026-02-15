@@ -187,16 +187,24 @@
     .build-btn:hover { background: rgba(200, 160, 60, 0.35); }
     .build-btn .cost { color: #c8a03c; font-size: 11px; }
 
-    /* Role panel */
-    #role-panel {
+    /* Right-side panel stack */
+    #right-panels {
       position: absolute;
       top: 50px; right: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    /* Role panel */
+    #role-panel {
       background: rgba(30, 20, 10, 0.85);
       border: 1px solid rgba(200, 160, 60, 0.4);
       border-radius: 6px;
       padding: 10px 14px;
       font-size: 13px;
-      width: 180px;
+      width: 210px;
     }
     .role-row {
       margin-bottom: 8px;
@@ -217,6 +225,103 @@
     }
     .role-value { min-width: 32px; text-align: right; }
 
+    /* Debug panel */
+    #debug-panel {
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 15;
+      pointer-events: auto;
+      display: flex;
+      flex-direction: row;
+    }
+    #debug-tab {
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      background: rgba(30, 20, 10, 0.85);
+      border: 1px solid rgba(200, 160, 60, 0.4);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      padding: 10px 5px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #c8a03c;
+      letter-spacing: 1px;
+    }
+    #debug-tab:hover { background: rgba(200, 160, 60, 0.25); }
+    #debug-content {
+      width: 0;
+      overflow: hidden;
+      background: rgba(30, 20, 10, 0.9);
+      border: 1px solid rgba(200, 160, 60, 0.4);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      transition: width 0.2s ease;
+      white-space: nowrap;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    #debug-panel.debug-open #debug-content {
+      width: 240px;
+      padding: 10px 12px;
+      overflow-y: auto;
+      max-height: 80vh;
+    }
+    #debug-panel.debug-open #debug-tab { display: none; }
+    #debug-content .debug-section {
+      margin-bottom: 8px;
+      border-bottom: 1px solid rgba(200, 160, 60, 0.2);
+      padding-bottom: 6px;
+    }
+    #debug-content .debug-section:last-child { border-bottom: none; }
+    #debug-content .debug-section-title {
+      color: #c8a03c;
+      font-weight: bold;
+      font-size: 11px;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    #debug-content .debug-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    #debug-content .debug-val { color: #f0e6d3; }
+    #debug-content .debug-lbl { color: rgba(240, 230, 211, 0.6); }
+    #debug-close {
+      background: none;
+      border: none;
+      color: rgba(240, 230, 211, 0.5);
+      cursor: pointer;
+      font-size: 14px;
+      float: right;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    #debug-close:hover { color: #f0e6d3; }
+    .debug-btn {
+      background: rgba(200, 160, 60, 0.2);
+      border: 1px solid rgba(200, 160, 60, 0.3);
+      color: #f0e6d3;
+      border-radius: 4px;
+      padding: 3px 8px;
+      cursor: pointer;
+      font-size: 11px;
+      margin: 2px 2px 2px 0;
+    }
+    .debug-btn:hover { background: rgba(200, 160, 60, 0.4); }
+    .debug-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 3px 0;
+    }
+    .debug-checkbox input { accent-color: #c8a03c; }
+    @media (max-width: 600px) {
+      #debug-panel { display: none !important; }
+    }
+
     /* Hover tooltip (follows cursor) */
     #hex-hover {
       position: absolute;
@@ -232,33 +337,32 @@
     }
     #hex-hover.visible { display: block; }
 
-    /* Selection detail panel */
+    /* Selection detail panel — stacks below role panel via #right-panels flex */
     #hex-info {
-      position: absolute;
-      bottom: 60px; right: 12px;
       background: rgba(30, 20, 10, 0.9);
       border: 1px solid rgba(200, 160, 60, 0.4);
       border-radius: 6px;
-      padding: 8px 12px;
-      font-size: 12px;
-      min-width: 160px;
-      max-width: 220px;
+      padding: 12px 16px;
+      font-size: 14px;
+      width: 210px;
       display: none;
+      line-height: 1.5;
     }
     #hex-info.visible { display: block; }
     #hex-info .info-header {
+      font-size: 16px;
       font-weight: bold;
-      margin-bottom: 4px;
-      border-bottom: 1px solid rgba(200, 160, 60, 0.25);
-      padding-bottom: 3px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(200, 160, 60, 0.3);
+      padding-bottom: 5px;
     }
     #hex-info .bee-list {
-      margin-top: 4px;
-      border-top: 1px solid rgba(200, 160, 60, 0.25);
-      padding-top: 3px;
+      margin-top: 6px;
+      border-top: 1px solid rgba(200, 160, 60, 0.3);
+      padding-top: 5px;
     }
     #hex-info .bee-entry {
-      font-size: 11px;
+      font-size: 13px;
       color: rgba(240, 230, 211, 0.8);
     }
 
@@ -395,18 +499,27 @@
         min-height: 44px;
       }
 
-      /* Hex info: bottom sheet above toolbar */
+      /* Right panels: reset on mobile */
+      #right-panels {
+        position: static;
+        display: contents;
+      }
+
+      /* Hex info: bottom sheet above toolbar on mobile */
       #hex-info {
         position: fixed;
+        top: auto;
         bottom: 52px;
         left: 0;
         right: 0;
+        width: auto;
         max-width: 100%;
         min-width: auto;
         border-radius: 8px 8px 0 0;
         max-height: 200px;
         overflow-y: auto;
         z-index: 11;
+        font-size: 13px;
       }
 
       /* Hover tooltip: hide on touch */
@@ -428,6 +541,58 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="hud">
+      <!-- Debug Panel -->
+      <div id="debug-panel">
+        <div id="debug-tab">Debug</div>
+        <div id="debug-content">
+          <button id="debug-close">&times;</button>
+          <div class="debug-section">
+            <div class="debug-section-title">Simulation</div>
+            <div class="debug-row"><span class="debug-lbl">Tick</span><span class="debug-val" id="dbg-tick">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Day</span><span class="debug-val" id="dbg-day">1</span></div>
+            <div class="debug-row"><span class="debug-lbl">Day Progress</span><span class="debug-val" id="dbg-day-pct">0%</span></div>
+            <div class="debug-row"><span class="debug-lbl">FPS</span><span class="debug-val" id="dbg-fps">0</span></div>
+          </div>
+          <div class="debug-section">
+            <div class="debug-section-title">Bees</div>
+            <div class="debug-row"><span class="debug-lbl">Forager</span><span class="debug-val" id="dbg-foragers">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Nurse</span><span class="debug-val" id="dbg-nurses">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Scout</span><span class="debug-val" id="dbg-scouts">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Builder</span><span class="debug-val" id="dbg-builders">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Hauler</span><span class="debug-val" id="dbg-haulers">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Total</span><span class="debug-val" id="dbg-total-bees">0</span></div>
+          </div>
+          <div class="debug-section">
+            <div class="debug-section-title">Flowers</div>
+            <div class="debug-row"><span class="debug-lbl">Total</span><span class="debug-val" id="dbg-flowers-total">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">With Nectar</span><span class="debug-val" id="dbg-flowers-nectar">0</span></div>
+          </div>
+          <div class="debug-section">
+            <div class="debug-section-title">Resources</div>
+            <div class="debug-row"><span class="debug-lbl">Honey</span><span class="debug-val" id="dbg-honey">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Nectar</span><span class="debug-val" id="dbg-nectar">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Pollen</span><span class="debug-val" id="dbg-pollen">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Bee Bread</span><span class="debug-val" id="dbg-beebread">0</span></div>
+            <div class="debug-row"><span class="debug-lbl">Wax</span><span class="debug-val" id="dbg-wax">0</span></div>
+          </div>
+          <div class="debug-section">
+            <div class="debug-section-title">Toggles &amp; Actions</div>
+            <label class="debug-checkbox">
+              <input type="checkbox" id="dbg-fog-toggle" />
+              Disable Fog of War
+            </label>
+            <div>
+              <button class="debug-btn" id="dbg-add-resources">+Resources</button>
+              <button class="debug-btn" id="dbg-spawn-bees">+5 Bees</button>
+            </div>
+            <div>
+              <button class="debug-btn" id="dbg-skip-night">Skip to Night</button>
+              <button class="debug-btn" id="dbg-skip-day">Skip to Day</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Speed Controls -->
       <div id="speed-controls">
         <button class="speed-btn" data-speed="0">||</button>
@@ -474,6 +639,9 @@
         <span id="time-text">Day 1 - Morning</span>
       </div>
 
+      <!-- Right-side panel stack -->
+      <div id="right-panels">
+
       <!-- Role Panel -->
       <div id="role-panel">
         <div style="margin-bottom:8px; font-weight:bold;">Roles</div>
@@ -503,12 +671,27 @@
         </div>
         <div class="role-row">
           <label>
+            Hauler
+            <input type="range" id="slider-hauler" min="0" max="100" value="0" />
+            <span class="role-value" id="val-hauler">0%</span>
+          </label>
+          <div class="role-desc">Transport from waystations</div>
+        </div>
+        <div class="role-row">
+          <label>
             Builder
             <span class="role-value" id="val-builder">10%</span>
           </label>
           <div class="role-desc">Construct new cells</div>
         </div>
       </div>
+
+      <!-- Selection Detail Panel -->
+      <div id="hex-info">
+        <div id="hex-info-content"></div>
+      </div>
+
+      </div><!-- end #right-panels -->
 
       <!-- Mode Toolbar -->
       <div id="mode-toolbar">
@@ -532,6 +715,9 @@
         <button class="build-btn" data-build="brood">
           Brood Cell<br/><span class="cost">12 wax, 5 honey</span>
         </button>
+        <button class="build-btn" data-build="waystation">
+          Waystation<br/><span class="cost">6 wax</span>
+        </button>
       </div>
 
       <!-- Build Notification -->
@@ -539,11 +725,6 @@
 
       <!-- Hover Tooltip -->
       <div id="hex-hover"></div>
-
-      <!-- Selection Detail Panel -->
-      <div id="hex-info">
-        <div id="hex-info-content"></div>
-      </div>
     </div>
   </div>
 

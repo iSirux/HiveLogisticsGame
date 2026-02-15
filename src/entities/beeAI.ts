@@ -7,9 +7,56 @@ import {
   TEND_TICKS, BROOD_TEND_AMOUNT, BROOD_HONEY_COST, BROOD_BEE_BREAD_COST, PROCESS_TICKS, PROCESSING_RATE,
   NECTAR_TO_HONEY_RATIO, NIGHT_START, DAWN_END,
   SCOUT_EXPLORE_RANGE, WAGGLE_DANCE_TICKS, POLLEN_STORAGE_CAPACITY,
+  ENERGY_HUNGER_THRESHOLD, ENERGY_RESTORE_PER_TICK, HONEY_PER_EAT_TICK, EAT_TICKS,
+  WAYSTATION_NECTAR_CAPACITY, WAYSTATION_POLLEN_CAPACITY,
+  HAULER_CARRY_CAPACITY, HAULER_PICKUP_TICKS,
 } from '../constants';
 
 export function updateBeeAI(bee: BeeEntity, world: World): void {
+  // Hunger interrupt (highest priority after death) — all roles
+  if (bee.state !== BeeState.Hungry && bee.state !== BeeState.Eating) {
+    if (bee.energy < ENERGY_HUNGER_THRESHOLD) {
+      const honeyCell = findHoneyCellWithHoney(world);
+      if (honeyCell) {
+        bee.state = BeeState.Hungry;
+        bee.targetQ = honeyCell.q;
+        bee.targetR = honeyCell.r;
+        bee.path = computePath(bee.q, bee.r, honeyCell.q, honeyCell.r, world);
+        return;
+      }
+    }
+  }
+
+  // Handle hunger/eating states for any role
+  if (bee.state === BeeState.Hungry) {
+    if (bee.path.length === 0) {
+      const cell = world.grid.get(bee.q, bee.r);
+      if (cell && cell.terrain === TerrainType.HoneyStorage && cell.honeyStored > 0.01) {
+        bee.state = BeeState.Eating;
+        bee.stateTimer = EAT_TICKS;
+      } else {
+        // Couldn't reach honey, try again
+        bee.state = BeeState.Idle;
+      }
+    }
+    return;
+  }
+
+  if (bee.state === BeeState.Eating) {
+    bee.stateTimer--;
+    const cell = world.grid.get(bee.q, bee.r);
+    if (cell && cell.honeyStored > 0) {
+      const consumed = Math.min(HONEY_PER_EAT_TICK, cell.honeyStored);
+      cell.honeyStored -= consumed;
+      world.resources.honey -= consumed;
+      bee.energy = Math.min(1, bee.energy + ENERGY_RESTORE_PER_TICK);
+    }
+    if (bee.stateTimer <= 0 || bee.energy >= 0.95) {
+      bee.state = BeeState.Idle;
+    }
+    return;
+  }
+
   // Night behavior: all bees return to hive and rest
   const isNight = world.dayProgress >= NIGHT_START || world.dayProgress < DAWN_END;
 
@@ -41,10 +88,68 @@ export function updateBeeAI(bee: BeeEntity, world: World): void {
     case BeeRole.Scout:
       updateScout(bee, world);
       break;
+    case BeeRole.Hauler:
+      updateHauler(bee, world);
+      break;
     case BeeRole.Builder:
       updateBuilder(bee, world);
       break;
   }
+}
+
+/** Shared deposit logic: deposit nectar/pollen at the hive */
+function depositAtHive(bee: BeeEntity, world: World): void {
+  // Deposit nectar to processing cells
+  if (bee.carrying.nectar > 0) {
+    const processingCells = world.grid.cellsOfType(TerrainType.Processing);
+    for (const cell of processingCells) {
+      const space = 3 - cell.nectarStored;
+      if (space > 0) {
+        const amount = Math.min(bee.carrying.nectar, space);
+        cell.nectarStored += amount;
+        world.resources.nectar += amount;
+        bee.carrying.nectar -= amount;
+        break;
+      }
+    }
+    bee.carrying.nectar = 0;
+  }
+
+  // Deposit pollen to pollen storage cells
+  if (bee.carrying.pollen > 0) {
+    const pollenCells = world.grid.cellsOfType(TerrainType.PollenStorage);
+    for (const cell of pollenCells) {
+      const space = POLLEN_STORAGE_CAPACITY - cell.pollenStored;
+      if (space > 0) {
+        const amount = Math.min(bee.carrying.pollen, space);
+        cell.pollenStored += amount;
+        bee.carrying.pollen -= amount;
+        break;
+      }
+    }
+    bee.carrying.pollen = 0;
+  }
+}
+
+/** Find the best deposit target for a forager: nearest waystation with capacity or hive */
+function findDepositTarget(bee: BeeEntity, world: World): { q: number; r: number } {
+  const hiveDist = hexDistance(bee.q, bee.r, 0, 0);
+  let bestDist = hiveDist;
+  let bestTarget = { q: 0, r: 0 };
+
+  const waystations = world.grid.waystationCells();
+  for (const ws of waystations) {
+    const nectarSpace = WAYSTATION_NECTAR_CAPACITY - ws.nectarStored;
+    const pollenSpace = WAYSTATION_POLLEN_CAPACITY - ws.pollenStored;
+    if (nectarSpace < 0.01 && pollenSpace < 0.01) continue;
+    const dist = hexDistance(bee.q, bee.r, ws.q, ws.r);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestTarget = { q: ws.q, r: ws.r };
+    }
+  }
+
+  return bestTarget;
 }
 
 function updateForager(bee: BeeEntity, world: World): void {
@@ -78,18 +183,18 @@ function updateForager(bee: BeeEntity, world: World): void {
       if (bee.stateTimer <= 0) {
         const cell = world.grid.get(bee.q, bee.r);
         if (cell) {
-          // Harvest nectar
           const nectarHarvest = Math.min(NECTAR_PER_HARVEST, cell.nectarAmount, BEE_CARRY_CAPACITY - bee.carrying.nectar);
           cell.nectarAmount -= nectarHarvest;
           bee.carrying.nectar += nectarHarvest;
 
-          // Harvest pollen alongside
           const pollenHarvest = Math.min(POLLEN_PER_HARVEST, cell.pollenAmount, BEE_CARRY_CAPACITY - bee.carrying.pollen);
           cell.pollenAmount -= pollenHarvest;
           bee.carrying.pollen += pollenHarvest;
         }
+        // Find nearest deposit target (waystation or hive)
+        const target = findDepositTarget(bee, world);
         bee.state = BeeState.ReturningToHive;
-        bee.path = computePath(bee.q, bee.r, 0, 0, world);
+        bee.path = computePath(bee.q, bee.r, target.q, target.r, world);
         world.pendingSounds.push('harvest');
       }
       break;
@@ -110,38 +215,33 @@ function updateForager(bee: BeeEntity, world: World): void {
     case BeeState.Depositing: {
       bee.stateTimer--;
       if (bee.stateTimer <= 0) {
-        // Deposit nectar to processing cells
-        if (bee.carrying.nectar > 0) {
-          const processingCells = world.grid.cellsOfType(TerrainType.Processing);
-          for (const cell of processingCells) {
-            const space = 3 - cell.nectarStored;
-            if (space > 0) {
-              const amount = Math.min(bee.carrying.nectar, space);
-              cell.nectarStored += amount;
-              world.resources.nectar += amount;
-              bee.carrying.nectar -= amount;
-              break;
-            }
+        const cell = world.grid.get(bee.q, bee.r);
+        if (cell && cell.terrain === TerrainType.Waystation) {
+          // Deposit at waystation
+          if (bee.carrying.nectar > 0) {
+            const space = WAYSTATION_NECTAR_CAPACITY - cell.nectarStored;
+            const amount = Math.min(bee.carrying.nectar, space);
+            cell.nectarStored += amount;
+            bee.carrying.nectar -= amount;
           }
-          bee.carrying.nectar = 0;
-        }
-
-        // Deposit pollen to pollen storage cells
-        if (bee.carrying.pollen > 0) {
-          const pollenCells = world.grid.cellsOfType(TerrainType.PollenStorage);
-          for (const cell of pollenCells) {
-            const space = POLLEN_STORAGE_CAPACITY - cell.pollenStored;
-            if (space > 0) {
-              const amount = Math.min(bee.carrying.pollen, space);
-              cell.pollenStored += amount;
-              bee.carrying.pollen -= amount;
-              break;
-            }
+          if (bee.carrying.pollen > 0) {
+            const space = WAYSTATION_POLLEN_CAPACITY - cell.pollenStored;
+            const amount = Math.min(bee.carrying.pollen, space);
+            cell.pollenStored += amount;
+            bee.carrying.pollen -= amount;
           }
-          bee.carrying.pollen = 0;
+          // If still carrying (waystation full), continue to hive
+          if (bee.carrying.nectar > 0.001 || bee.carrying.pollen > 0.001) {
+            bee.state = BeeState.ReturningToHive;
+            bee.path = computePath(bee.q, bee.r, 0, 0, world);
+          } else {
+            bee.state = BeeState.Idle;
+          }
+        } else {
+          // Deposit at hive
+          depositAtHive(bee, world);
+          bee.state = BeeState.Idle;
         }
-
-        bee.state = BeeState.Idle;
       }
       break;
     }
@@ -151,7 +251,6 @@ function updateForager(bee: BeeEntity, world: World): void {
 function updateNurse(bee: BeeEntity, world: World): void {
   switch (bee.state) {
     case BeeState.Idle: {
-      // Priority 1: tend brood that needs care
       const broodCell = findBroodNeedingCare(world);
       if (broodCell) {
         bee.targetQ = broodCell.q;
@@ -160,7 +259,6 @@ function updateNurse(bee: BeeEntity, world: World): void {
         bee.path = computePath(bee.q, bee.r, broodCell.q, broodCell.r, world);
         break;
       }
-      // Priority 2: help process nectar
       const procCell = findProcessingCell(world);
       if (procCell) {
         bee.targetQ = procCell.q;
@@ -169,7 +267,6 @@ function updateNurse(bee: BeeEntity, world: World): void {
         bee.path = computePath(bee.q, bee.r, procCell.q, procCell.r, world);
         break;
       }
-      // Priority 3: activate empty brood cells if we have honey AND bee bread
       const emptyBrood = findEmptyBrood(world);
       if (emptyBrood && world.resources.honey >= BROOD_HONEY_COST && world.resources.beeBread >= BROOD_BEE_BREAD_COST) {
         if (world.deductHoney(BROOD_HONEY_COST) && world.deductBeeBread(BROOD_BEE_BREAD_COST)) {
@@ -296,6 +393,80 @@ function updateScout(bee: BeeEntity, world: World): void {
   }
 }
 
+function updateHauler(bee: BeeEntity, world: World): void {
+  switch (bee.state) {
+    case BeeState.Idle: {
+      // Find waystation with resources to pick up
+      const ws = findWaystationWithResources(world);
+      if (ws) {
+        bee.targetQ = ws.q;
+        bee.targetR = ws.r;
+        bee.state = BeeState.FlyingToWaystation;
+        bee.path = computePath(bee.q, bee.r, ws.q, ws.r, world);
+      }
+      break;
+    }
+
+    case BeeState.FlyingToWaystation: {
+      if (bee.path.length === 0) {
+        const cell = world.grid.get(bee.q, bee.r);
+        if (cell && cell.terrain === TerrainType.Waystation && (cell.nectarStored > 0.01 || cell.pollenStored > 0.01)) {
+          bee.state = BeeState.PickingUp;
+          bee.stateTimer = HAULER_PICKUP_TICKS;
+        } else {
+          bee.state = BeeState.Idle;
+        }
+      }
+      break;
+    }
+
+    case BeeState.PickingUp: {
+      bee.stateTimer--;
+      if (bee.stateTimer <= 0) {
+        const cell = world.grid.get(bee.q, bee.r);
+        if (cell) {
+          // Pick up nectar
+          const nectarPickup = Math.min(HAULER_CARRY_CAPACITY, cell.nectarStored);
+          cell.nectarStored -= nectarPickup;
+          bee.carrying.nectar += nectarPickup;
+
+          // Pick up pollen with remaining capacity
+          const remainingCapacity = HAULER_CARRY_CAPACITY - nectarPickup;
+          if (remainingCapacity > 0) {
+            const pollenPickup = Math.min(remainingCapacity, cell.pollenStored);
+            cell.pollenStored -= pollenPickup;
+            bee.carrying.pollen += pollenPickup;
+          }
+        }
+        bee.state = BeeState.ReturningToHive;
+        bee.path = computePath(bee.q, bee.r, 0, 0, world);
+      }
+      break;
+    }
+
+    case BeeState.ReturningToHive: {
+      if (bee.path.length === 0) {
+        if (bee.carrying.nectar > 0 || bee.carrying.pollen > 0) {
+          bee.state = BeeState.Depositing;
+          bee.stateTimer = DEPOSIT_TICKS;
+        } else {
+          bee.state = BeeState.Idle;
+        }
+      }
+      break;
+    }
+
+    case BeeState.Depositing: {
+      bee.stateTimer--;
+      if (bee.stateTimer <= 0) {
+        depositAtHive(bee, world);
+        bee.state = BeeState.Idle;
+      }
+      break;
+    }
+  }
+}
+
 function updateBuilder(bee: BeeEntity, world: World): void {
   if (bee.state === BeeState.Idle) {
     bee.state = BeeState.IdleAtHive;
@@ -307,6 +478,33 @@ function updateBuilder(bee: BeeEntity, world: World): void {
   if (bee.state === BeeState.ReturningToHive && bee.path.length === 0) {
     bee.state = BeeState.IdleAtHive;
   }
+}
+
+function findHoneyCellWithHoney(world: World): HexCell | null {
+  const cells = world.grid.cellsOfType(TerrainType.HoneyStorage);
+  let best: HexCell | null = null;
+  let bestHoney = 0;
+  for (const c of cells) {
+    if (c.honeyStored > bestHoney) {
+      bestHoney = c.honeyStored;
+      best = c;
+    }
+  }
+  return best && bestHoney > 0.01 ? best : null;
+}
+
+function findWaystationWithResources(world: World): HexCell | null {
+  const waystations = world.grid.waystationCells();
+  let best: HexCell | null = null;
+  let bestResources = 0;
+  for (const ws of waystations) {
+    const total = ws.nectarStored + ws.pollenStored;
+    if (total > 0.01 && total > bestResources) {
+      bestResources = total;
+      best = ws;
+    }
+  }
+  return best;
 }
 
 function findBestFlower(bee: BeeEntity, world: World): HexCell | null {
@@ -367,7 +565,6 @@ function findUnexploredTarget(bee: BeeEntity, world: World): { q: number; r: num
     const dist = hexDistance(0, 0, cell.q, cell.r);
     if (dist > SCOUT_EXPLORE_RANGE) continue;
 
-    // Prefer hexes adjacent to explored area (frontier)
     const neighbors = hexNeighbors(cell.q, cell.r);
     let nearExplored = false;
     for (const n of neighbors) {
