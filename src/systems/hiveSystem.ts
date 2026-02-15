@@ -22,11 +22,9 @@ export function updateHive(world: World): void {
       if (space > 0) {
         const amount = Math.min(honeyProduced, space);
         sc.honeyStored += amount;
-        world.resources.honey += amount;
         break;
       }
     }
-    world.resources.nectar = Math.max(0, world.resources.nectar - processed);
   }
 
   // === Brood hatching ===

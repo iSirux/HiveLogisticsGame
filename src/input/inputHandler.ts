@@ -152,6 +152,19 @@ export class InputHandler {
       case 'P':
         this.setMode(InputMode.Pheromone);
         break;
+      case ' ':
+        e.preventDefault();
+        this.togglePause();
+        break;
+      case '1':
+        this.setSpeed(1);
+        break;
+      case '2':
+        this.setSpeed(2);
+        break;
+      case '3':
+        this.setSpeed(3);
+        break;
     }
   }
 
@@ -174,20 +187,33 @@ export class InputHandler {
     const key = hexKey(q, r);
     if (!valid.has(key)) return;
 
+    const cell = this.world.grid.get(q, r);
+    if (!cell) return;
+
     const buildType = this.world.inputState.buildType;
     const cost = BUILD_COSTS[buildType];
     if (!cost) return;
 
-    if (this.world.resources.wax < cost.wax || this.world.resources.honey < cost.honey) return;
+    // Check resources and show feedback if insufficient
+    if (this.world.resources.wax < cost.wax) {
+      this.world.notification = `Need ${cost.wax} wax (have ${this.world.resources.wax.toFixed(1)})`;
+      this.world.notificationTimer = 2;
+      return;
+    }
+    if (cost.honey > 0 && this.world.resources.honey < cost.honey) {
+      this.world.notification = `Need ${cost.honey} honey (have ${this.world.resources.honey.toFixed(1)})`;
+      this.world.notificationTimer = 2;
+      return;
+    }
 
-    // Deduct resources
+    // Deduct wax from global pool (not cell-stored)
     this.world.resources.wax -= cost.wax;
-    this.world.resources.honey -= cost.honey;
+    // Deduct honey from storage cells so hive system recalculation stays consistent
+    if (cost.honey > 0) {
+      this.world.deductHoney(cost.honey);
+    }
 
     // Place cell
-    const cell = this.world.grid.get(q, r);
-    if (!cell) return;
-
     const terrainMap: Record<BuildType, TerrainType> = {
       honey_storage: TerrainType.HoneyStorage,
       processing: TerrainType.Processing,
@@ -202,6 +228,28 @@ export class InputHandler {
 
     // Trigger build sound
     this.world.pendingSounds.push('build');
+  }
+
+  private togglePause(): void {
+    if (!this.world) return;
+    this.world.settings.paused = !this.world.settings.paused;
+    this.updateSpeedButtons();
+  }
+
+  private setSpeed(speed: number): void {
+    if (!this.world) return;
+    this.world.settings.paused = false;
+    this.world.settings.speedMultiplier = speed;
+    this.updateSpeedButtons();
+  }
+
+  private updateSpeedButtons(): void {
+    const paused = this.world.settings.paused;
+    const speed = this.world.settings.speedMultiplier;
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      const btnSpeed = parseInt((btn as HTMLElement).dataset.speed || '0');
+      btn.classList.toggle('active', paused ? btnSpeed === 0 : btnSpeed === speed);
+    });
   }
 
   private paintPheromone(q: number, r: number) {

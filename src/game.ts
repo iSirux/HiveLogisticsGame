@@ -40,6 +40,14 @@ export class Game {
 
     // Handle resize
     window.addEventListener('resize', () => this.renderer.handleResize());
+
+    // Volume slider
+    const volSlider = document.getElementById('volume-slider') as HTMLInputElement;
+    if (volSlider) {
+      volSlider.addEventListener('input', () => {
+        this.audioManager.setVolume(parseInt(volSlider.value) / 100);
+      });
+    }
   }
 
   start(): void {

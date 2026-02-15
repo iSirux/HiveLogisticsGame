@@ -16,11 +16,11 @@ export const INITIAL_NECTAR_MIN = 0.5;
 export const INITIAL_NECTAR_MAX = 1.0;
 
 // === Bees ===
-export const STARTING_FORAGERS = 8;
-export const STARTING_NURSES = 3;
-export const STARTING_BUILDERS = 2;
-export const BEE_SPEED = 1;              // hexes per tick
-export const HARVEST_TICKS = 8;          // ticks to harvest a flower
+export const STARTING_FORAGERS = 3;
+export const STARTING_NURSES = 1;
+export const STARTING_BUILDERS = 1;
+export const BEE_SPEED = 0.3;            // hexes per tick
+export const HARVEST_TICKS = 25;         // ticks to harvest a flower
 export const DEPOSIT_TICKS = 3;          // ticks to deposit nectar
 export const NECTAR_PER_HARVEST = 0.15;  // nectar taken per harvest
 export const BEE_CARRY_CAPACITY = 0.15;

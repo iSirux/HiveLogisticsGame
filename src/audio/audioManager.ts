@@ -2,17 +2,29 @@ import { World } from '../world/world';
 
 export class AudioManager {
   private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
   private buzzGain: GainNode | null = null;
   private initialized = false;
+  private volume = 0.3;
 
   init(): void {
     if (this.initialized) return;
     try {
       this.ctx = new AudioContext();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = this.volume;
+      this.masterGain.connect(this.ctx.destination);
       this.initialized = true;
       this.startAmbientBuzz();
     } catch {
       // Audio not available
+    }
+  }
+
+  setVolume(v: number): void {
+    this.volume = v;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.linearRampToValueAtTime(v, this.ctx.currentTime + 0.05);
     }
   }
 
@@ -33,7 +45,7 @@ export class AudioManager {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain!);
     osc.start();
 
     this.buzzGain = gain;
@@ -77,7 +89,7 @@ export class AudioManager {
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain!);
     osc.start();
     osc.stop(this.ctx.currentTime + duration);
   }
@@ -104,7 +116,7 @@ export class AudioManager {
 
     source.connect(filter);
     filter.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain!);
     source.start();
   }
 
@@ -120,7 +132,7 @@ export class AudioManager {
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
 
     osc.connect(gain);
-    gain.connect(this.ctx.destination);
+    gain.connect(this.masterGain!);
     osc.start();
     osc.stop(this.ctx.currentTime + 0.3);
   }

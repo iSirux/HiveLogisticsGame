@@ -1,5 +1,5 @@
 import { HexGrid } from '../hex/hexGrid';
-import { BeeEntity, InputState, InputMode, Resources, WorldSettings } from '../types';
+import { BeeEntity, InputState, InputMode, Resources, WorldSettings, TerrainType } from '../types';
 
 export class World {
   grid: HexGrid = new HexGrid();
@@ -30,4 +30,23 @@ export class World {
 
   // Sound events queue (consumed by audio manager each frame)
   pendingSounds: string[] = [];
+
+  // Brief notification message for the player
+  notification: string = '';
+  notificationTimer: number = 0;
+
+  /** Deduct honey from storage cells. Returns true if enough honey was available. */
+  deductHoney(amount: number): boolean {
+    const storageCells = this.grid.cellsOfType(TerrainType.HoneyStorage);
+    const total = storageCells.reduce((sum, c) => sum + c.honeyStored, 0);
+    if (total < amount - 0.001) return false;
+    let remaining = amount;
+    for (const sc of storageCells) {
+      if (remaining <= 0) break;
+      const take = Math.min(sc.honeyStored, remaining);
+      sc.honeyStored -= take;
+      remaining -= take;
+    }
+    return true;
+  }
 }

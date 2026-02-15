@@ -119,11 +119,10 @@ function updateForager(bee: BeeEntity, world: World): void {
           }
         }
         if (!deposited) {
-          // No room — store as global nectar anyway (overflow)
-          world.resources.nectar += bee.carryingNectar;
+          // No room — bee keeps carrying nectar and goes idle to retry later
+        } else {
           bee.carryingNectar = 0;
         }
-        bee.carryingNectar = 0;
         bee.state = BeeState.Idle;
       }
       break;
@@ -155,9 +154,11 @@ function updateNurse(bee: BeeEntity, world: World): void {
       // Priority 3: activate empty brood cells if we have honey
       const emptyBrood = findEmptyBrood(world);
       if (emptyBrood && world.resources.honey >= BROOD_HONEY_COST) {
-        world.resources.honey -= BROOD_HONEY_COST;
-        emptyBrood.broodActive = true;
-        emptyBrood.broodProgress = 0;
+        // Deduct honey from storage cells (not just global counter)
+        if (world.deductHoney(BROOD_HONEY_COST)) {
+          emptyBrood.broodActive = true;
+          emptyBrood.broodProgress = 0;
+        }
       }
       break;
     }

@@ -1,7 +1,7 @@
 import { World } from '../world/world';
 import { InputMode, BeeRole, TerrainType, BuildType } from '../types';
 import { InputHandler } from '../input/inputHandler';
-import { NIGHT_START, DAWN_END } from '../constants';
+import { NIGHT_START, DAWN_END, BUILD_COSTS } from '../constants';
 
 export class UIManager {
   private world!: World;
@@ -149,6 +149,28 @@ export class UIManager {
     else if (dp < 0.85) timeOfDay = 'Evening';
     else timeOfDay = 'Night';
     this.setText('time-text', `Day ${this.world.dayCount} - ${timeOfDay}`);
+
+    // Update build button affordability
+    document.querySelectorAll('.build-btn').forEach(btn => {
+      const buildType = (btn as HTMLElement).dataset.build as string;
+      const cost = BUILD_COSTS[buildType];
+      if (cost) {
+        const canAfford = this.world.resources.wax >= cost.wax && this.world.resources.honey >= cost.honey;
+        (btn as HTMLElement).style.opacity = canAfford ? '1' : '0.4';
+      }
+    });
+
+    // Update notification
+    const notifEl = document.getElementById('build-notification');
+    if (notifEl) {
+      if (this.world.notificationTimer > 0) {
+        notifEl.textContent = this.world.notification;
+        notifEl.classList.add('visible');
+        this.world.notificationTimer -= 1 / 60; // approximate per-frame decay
+      } else {
+        notifEl.classList.remove('visible');
+      }
+    }
 
     // Update hex info
     this.updateHexInfo();
