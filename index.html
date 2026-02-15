@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Hive Logistics</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1a1a2e; touch-action: none; overscroll-behavior: none; }
     #game-container {
       position: relative;
       width: 100%;
@@ -16,6 +16,7 @@
       display: block;
       width: 100%;
       height: 100%;
+      touch-action: none;
     }
 
     /* HUD overlay */
@@ -35,21 +36,45 @@
       top: 8px; left: 50%;
       transform: translateX(-50%);
       display: flex;
-      gap: 16px;
+      gap: 14px;
       background: rgba(30, 20, 10, 0.85);
       border: 1px solid rgba(200, 160, 60, 0.4);
       border-radius: 6px;
-      padding: 6px 16px;
-      font-size: 14px;
+      padding: 6px 14px;
+      font-size: 13px;
     }
     .resource-item {
       display: flex;
       align-items: center;
       gap: 4px;
+      position: relative;
+      cursor: default;
+    }
+    .resource-item[data-tip]::after {
+      content: attr(data-tip);
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      margin-top: 6px;
+      background: rgba(30, 20, 10, 0.95);
+      border: 1px solid rgba(200, 160, 60, 0.5);
+      border-radius: 5px;
+      padding: 5px 9px;
+      font-size: 11px;
+      color: #f0e6d3;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 20;
+    }
+    .resource-item[data-tip]:hover::after {
+      opacity: 1;
     }
     .resource-icon {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       border-radius: 3px;
       display: inline-block;
     }
@@ -192,7 +217,22 @@
     }
     .role-value { min-width: 32px; text-align: right; }
 
-    /* Hex info tooltip */
+    /* Hover tooltip (follows cursor) */
+    #hex-hover {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(30, 20, 10, 0.9);
+      border: 1px solid rgba(200, 160, 60, 0.4);
+      border-radius: 5px;
+      padding: 4px 8px;
+      font-size: 12px;
+      white-space: nowrap;
+      display: none;
+      z-index: 10;
+    }
+    #hex-hover.visible { display: block; }
+
+    /* Selection detail panel */
     #hex-info {
       position: absolute;
       bottom: 60px; right: 12px;
@@ -201,10 +241,26 @@
       border-radius: 6px;
       padding: 8px 12px;
       font-size: 12px;
-      min-width: 140px;
+      min-width: 160px;
+      max-width: 220px;
       display: none;
     }
     #hex-info.visible { display: block; }
+    #hex-info .info-header {
+      font-weight: bold;
+      margin-bottom: 4px;
+      border-bottom: 1px solid rgba(200, 160, 60, 0.25);
+      padding-bottom: 3px;
+    }
+    #hex-info .bee-list {
+      margin-top: 4px;
+      border-top: 1px solid rgba(200, 160, 60, 0.25);
+      padding-top: 3px;
+    }
+    #hex-info .bee-entry {
+      font-size: 11px;
+      color: rgba(240, 230, 211, 0.8);
+    }
 
     /* Build notification */
     #build-notification {
@@ -221,6 +277,150 @@
       white-space: nowrap;
     }
     #build-notification.visible { display: block; }
+
+    /* Role toggle button - hidden on desktop */
+    #role-toggle {
+      display: none;
+      background: rgba(200, 160, 60, 0.2);
+      border: 1px solid rgba(200, 160, 60, 0.3);
+      color: #f0e6d3;
+      border-radius: 4px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #role-toggle:hover { background: rgba(200, 160, 60, 0.4); }
+
+    /* ===== Mobile layout ===== */
+    @media (max-width: 600px) {
+      /* Resource bar: wrap items, smaller text */
+      #resource-bar {
+        font-size: 11px;
+        gap: 6px;
+        padding: 4px 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+        max-width: 100%;
+        left: 0;
+        right: 0;
+        transform: none;
+        border-radius: 0;
+        top: 0;
+      }
+      .resource-item[data-tip]::after { display: none !important; }
+
+      /* Speed controls: smaller, hide volume */
+      #speed-controls {
+        padding: 3px 6px;
+        top: auto;
+        bottom: 56px;
+        left: 8px;
+        z-index: 5;
+      }
+      .speed-btn { padding: 2px 6px; font-size: 12px; }
+      .volume-sep, .volume-control { display: none; }
+
+      /* Time display: move below resource bar */
+      #time-display {
+        top: auto;
+        bottom: 56px;
+        right: 8px;
+        left: auto;
+        font-size: 12px;
+        padding: 4px 8px;
+        z-index: 5;
+      }
+
+      /* Mode toolbar: pin to bottom full-width */
+      #mode-toolbar {
+        bottom: 0;
+        left: 0;
+        right: 0;
+        transform: none;
+        border-radius: 0;
+        justify-content: center;
+        padding: 6px 8px;
+        gap: 4px;
+        z-index: 10;
+      }
+      .mode-btn {
+        min-height: 44px;
+        padding: 6px 10px;
+        font-size: 13px;
+        flex: 1;
+        text-align: center;
+      }
+
+      /* Build panel: full width above toolbar */
+      #build-panel {
+        bottom: 52px;
+        left: 0;
+        right: 0;
+        transform: none;
+        border-radius: 6px 6px 0 0;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 6px 8px;
+        z-index: 9;
+      }
+      .build-btn { min-height: 44px; flex: 1; min-width: 80px; }
+
+      /* Role panel: collapsible bottom sheet */
+      #role-panel {
+        position: fixed;
+        top: auto;
+        bottom: 52px;
+        left: 0;
+        right: 0;
+        width: 100%;
+        border-radius: 8px 8px 0 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.25s ease;
+        z-index: 12;
+        padding: 0 14px;
+      }
+      #role-panel.mobile-open {
+        max-height: 280px;
+        padding: 10px 14px;
+        overflow-y: auto;
+      }
+      #role-panel input[type="range"] {
+        touch-action: auto;
+      }
+
+      /* Role toggle: show on mobile */
+      #role-toggle {
+        display: inline-block;
+        min-height: 44px;
+      }
+
+      /* Hex info: bottom sheet above toolbar */
+      #hex-info {
+        position: fixed;
+        bottom: 52px;
+        left: 0;
+        right: 0;
+        max-width: 100%;
+        min-width: auto;
+        border-radius: 8px 8px 0 0;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 11;
+      }
+
+      /* Hover tooltip: hide on touch */
+      #hex-hover { display: none !important; }
+
+      /* Build notification: reposition above build area */
+      #build-notification {
+        bottom: 110px;
+        font-size: 12px;
+      }
+
+      /* Minimap: hide on mobile */
+      #minimap { display: none !important; }
+    }
   </style>
 </head>
 <body>
@@ -243,19 +443,27 @@
 
       <!-- Resource Bar -->
       <div id="resource-bar">
-        <div class="resource-item">
+        <div class="resource-item" data-tip="Processed from nectar. Feeds brood and fuels building.">
           <span class="resource-icon" style="background:#f0c040;"></span>
           <span>Honey: <span id="res-honey">0</span></span>
         </div>
-        <div class="resource-item">
+        <div class="resource-item" data-tip="Collected from flowers by foragers. Processed into honey.">
           <span class="resource-icon" style="background:#80d040;"></span>
           <span>Nectar: <span id="res-nectar">0</span></span>
         </div>
-        <div class="resource-item">
+        <div class="resource-item" data-tip="Gathered from flowers. Combined with honey to make bee bread.">
+          <span class="resource-icon" style="background:#e0c020;"></span>
+          <span>Pollen: <span id="res-pollen">0</span></span>
+        </div>
+        <div class="resource-item" data-tip="Made from pollen + honey. Required to start brood cycles.">
+          <span class="resource-icon" style="background:#c8a040;"></span>
+          <span>Bee Bread: <span id="res-beebread">0</span></span>
+        </div>
+        <div class="resource-item" data-tip="Produced passively by the hive. Used to build new cells.">
           <span class="resource-icon" style="background:#e8d8a0;"></span>
           <span>Wax: <span id="res-wax">0</span></span>
         </div>
-        <div class="resource-item">
+        <div class="resource-item" data-tip="Your colony population. Roles shown as Forager/Nurse/Scout/Builder.">
           <span class="resource-icon" style="background:#e8a020;"></span>
           <span>Bees: <span id="res-bees">0</span></span>
         </div>
@@ -272,10 +480,10 @@
         <div class="role-row">
           <label>
             Forager
-            <input type="range" id="slider-forager" min="0" max="100" value="60" />
-            <span class="role-value" id="val-forager">60%</span>
+            <input type="range" id="slider-forager" min="0" max="100" value="55" />
+            <span class="role-value" id="val-forager">55%</span>
           </label>
-          <div class="role-desc">Gather nectar from flowers</div>
+          <div class="role-desc">Gather nectar &amp; pollen</div>
         </div>
         <div class="role-row">
           <label>
@@ -287,8 +495,16 @@
         </div>
         <div class="role-row">
           <label>
+            Scout
+            <input type="range" id="slider-scout" min="0" max="100" value="10" />
+            <span class="role-value" id="val-scout">10%</span>
+          </label>
+          <div class="role-desc">Explore &amp; reveal terrain</div>
+        </div>
+        <div class="role-row">
+          <label>
             Builder
-            <span class="role-value" id="val-builder">15%</span>
+            <span class="role-value" id="val-builder">10%</span>
           </label>
           <div class="role-desc">Construct new cells</div>
         </div>
@@ -299,12 +515,16 @@
         <button class="mode-btn active" data-mode="select">Select (Esc)</button>
         <button class="mode-btn" data-mode="build">Build (B)</button>
         <button class="mode-btn" data-mode="pheromone">Pheromone (P)</button>
+        <button id="role-toggle">Roles</button>
       </div>
 
       <!-- Build Panel -->
       <div id="build-panel">
         <button class="build-btn" data-build="honey_storage">
           Honey Storage<br/><span class="cost">10 wax</span>
+        </button>
+        <button class="build-btn" data-build="pollen_storage">
+          Pollen Storage<br/><span class="cost">8 wax</span>
         </button>
         <button class="build-btn" data-build="processing">
           Processing<br/><span class="cost">8 wax</span>
@@ -317,7 +537,10 @@
       <!-- Build Notification -->
       <div id="build-notification"></div>
 
-      <!-- Hex Info -->
+      <!-- Hover Tooltip -->
+      <div id="hex-hover"></div>
+
+      <!-- Selection Detail Panel -->
       <div id="hex-info">
         <div id="hex-info-content"></div>
       </div>

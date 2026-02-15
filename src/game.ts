@@ -9,6 +9,8 @@ import { updateForaging } from './systems/foragingSystem';
 import { updateHive } from './systems/hiveSystem';
 import { updatePheromones } from './systems/pheromoneSystem';
 import { updateDayNight } from './systems/dayNightSystem';
+import { updateExploration } from './systems/explorationSystem';
+import { Minimap } from './rendering/minimap';
 import { SIM_TICK_MS, MAX_TICKS_PER_FRAME } from './constants';
 
 export class Game {
@@ -17,6 +19,7 @@ export class Game {
   inputHandler: InputHandler;
   uiManager: UIManager;
   audioManager: AudioManager;
+  minimap: Minimap;
 
   private lastTime = 0;
   private accumulator = 0;
@@ -28,6 +31,7 @@ export class Game {
     this.inputHandler = new InputHandler(canvas, this.renderer.camera);
     this.uiManager = new UIManager();
     this.audioManager = new AudioManager();
+    this.minimap = new Minimap(document.getElementById('game-container')!, this.renderer.camera);
 
     // Wire up
     this.inputHandler.setWorld(this.world);
@@ -39,7 +43,12 @@ export class Game {
     generateWorld(this.world);
 
     // Handle resize
-    window.addEventListener('resize', () => this.renderer.handleResize());
+    const onResize = () => {
+      this.renderer.handleResize();
+      this.minimap.handleResize();
+    };
+    window.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('resize', onResize);
 
     // Volume slider
     const volSlider = document.getElementById('volume-slider') as HTMLInputElement;
@@ -82,6 +91,7 @@ export class Game {
     // Render with interpolation alpha
     const tickAlpha = this.accumulator / SIM_TICK_MS;
     this.renderer.render(this.world, tickAlpha);
+    this.minimap.render(this.world, this.renderer.camera, tickAlpha);
 
     // Update UI
     this.uiManager.update();
@@ -105,5 +115,6 @@ export class Game {
     updateHive(this.world);
     updatePheromones(this.world);
     updateDayNight(this.world);
+    updateExploration(this.world);
   }
 }

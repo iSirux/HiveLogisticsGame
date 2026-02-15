@@ -28,14 +28,18 @@ export function assignRoleFromRatios(world: World, bee: BeeEntity): void {
 
   const foragerTarget = Math.round(world.settings.foragerRatio * total);
   const nurseTarget = Math.round(world.settings.nurseRatio * total);
+  const scoutTarget = Math.round(world.settings.scoutRatio * total);
 
   const currentForagers = world.bees.filter(b => b.role === BeeRole.Forager).length;
   const currentNurses = world.bees.filter(b => b.role === BeeRole.Nurse).length;
+  const currentScouts = world.bees.filter(b => b.role === BeeRole.Scout).length;
 
   if (currentForagers < foragerTarget) {
     bee.role = BeeRole.Forager;
   } else if (currentNurses < nurseTarget) {
     bee.role = BeeRole.Nurse;
+  } else if (currentScouts < scoutTarget) {
+    bee.role = BeeRole.Scout;
   } else {
     bee.role = BeeRole.Builder;
   }

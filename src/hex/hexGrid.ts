@@ -21,13 +21,19 @@ export class HexGrid {
       q, r, terrain,
       nectarAmount: 0,
       nectarMax: 0,
+      pollenAmount: 0,
+      pollenMax: 0,
       flowerColor: '#ff69b4',
+      resinAmount: 0,
+      resinMax: 0,
       honeyStored: 0,
       nectarStored: 0,
+      pollenStored: 0,
       processingProgress: 0,
       broodProgress: 0,
       broodActive: false,
       pheromone: 0,
+      explored: false,
     };
     this.set(q, r, cell);
     return cell;
@@ -42,11 +48,12 @@ export class HexGrid {
     return this.allCells().filter(c => c.terrain === terrain);
   }
 
-  /** Get all hive cells (entrance + storage + processing + brood) */
+  /** Get all hive cells (entrance + storage + processing + brood + pollen storage) */
   hiveCells(): HexCell[] {
     return this.allCells().filter(c =>
       c.terrain === TerrainType.HiveEntrance ||
       c.terrain === TerrainType.HoneyStorage ||
+      c.terrain === TerrainType.PollenStorage ||
       c.terrain === TerrainType.Processing ||
       c.terrain === TerrainType.Brood
     );

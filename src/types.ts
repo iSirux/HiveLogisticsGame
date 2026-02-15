@@ -8,8 +8,11 @@ export interface AxialCoord {
 export enum TerrainType {
   Grass = 'grass',
   Flower = 'flower',
+  Tree = 'tree',
+  Water = 'water',
   HiveEntrance = 'hive_entrance',
   HoneyStorage = 'honey_storage',
+  PollenStorage = 'pollen_storage',
   Processing = 'processing',
   Brood = 'brood',
   Empty = 'empty',
@@ -22,21 +25,30 @@ export interface HexCell {
   // Flower fields
   nectarAmount: number;    // 0-1 current nectar
   nectarMax: number;       // max nectar capacity
+  pollenAmount: number;    // 0-1 current pollen
+  pollenMax: number;       // max pollen capacity
   flowerColor: string;     // petal color
+  // Tree fields
+  resinAmount: number;
+  resinMax: number;
   // Hive cell fields
   honeyStored: number;
   nectarStored: number;
+  pollenStored: number;    // pollen in pollen storage cells
   processingProgress: number; // 0-1
   broodProgress: number;     // 0-1, hatches at 1
   broodActive: boolean;
   // Pheromone
   pheromone: number;       // 0-1
+  // Fog of war
+  explored: boolean;
 }
 
 // === Bee ===
 export enum BeeRole {
   Forager = 'forager',
   Nurse = 'nurse',
+  Scout = 'scout',
   Builder = 'builder',
 }
 
@@ -54,6 +66,10 @@ export enum BeeState {
   Processing = 'processing',
   // Builder
   IdleAtHive = 'idle_at_hive',
+  // Scout states
+  FlyingToExplore = 'flying_to_explore',
+  Exploring = 'exploring',
+  WaggleDancing = 'waggle_dancing',
 }
 
 export interface BeeEntity {
@@ -70,10 +86,14 @@ export interface BeeEntity {
   prevPixelY: number;
   // Movement
   path: AxialCoord[];
-  // Foraging
-  carryingNectar: number;
+  moveProgress: number; // 0-1, advances by BEE_SPEED per tick
+  // Carrying resources
+  carrying: { nectar: number; pollen: number };
   targetQ: number;
   targetR: number;
+  // Scout fields
+  explorationTarget: AxialCoord | null;
+  danceTicks: number;
   // Timers
   stateTimer: number; // ticks remaining in current state action
   // Visual
@@ -87,7 +107,7 @@ export enum InputMode {
   Pheromone = 'pheromone',
 }
 
-export type BuildType = 'honey_storage' | 'processing' | 'brood';
+export type BuildType = 'honey_storage' | 'processing' | 'brood' | 'pollen_storage';
 
 export interface InputState {
   mode: InputMode;
@@ -105,13 +125,16 @@ export interface Resources {
   honey: number;
   nectar: number;
   wax: number;
+  pollen: number;
+  beeBread: number;
 }
 
 // === World Settings ===
 export interface WorldSettings {
   foragerRatio: number;  // 0-1
   nurseRatio: number;    // 0-1
-  // builder = 1 - forager - nurse
+  scoutRatio: number;    // 0-1
+  // builder = 1 - forager - nurse - scout
   speedMultiplier: number; // 0, 1, 2, 3
   paused: boolean;
 }

@@ -2,10 +2,11 @@ import { BeeEntity, BeeRole, BeeState, TerrainType, HexCell } from '../types';
 import { World } from '../world/world';
 import { hexDistance, hexNeighbors } from '../hex/hex';
 import {
-  HARVEST_TICKS, DEPOSIT_TICKS, NECTAR_PER_HARVEST, BEE_CARRY_CAPACITY,
-  SCORE_DISTANCE_WEIGHT, SCORE_PHEROMONE_WEIGHT, SCORE_NECTAR_WEIGHT, SCORE_JITTER,
-  TEND_TICKS, BROOD_TEND_AMOUNT, BROOD_HONEY_COST, PROCESS_TICKS, PROCESSING_RATE,
+  HARVEST_TICKS, DEPOSIT_TICKS, NECTAR_PER_HARVEST, POLLEN_PER_HARVEST, BEE_CARRY_CAPACITY,
+  SCORE_DISTANCE_WEIGHT, SCORE_PHEROMONE_WEIGHT, SCORE_NECTAR_WEIGHT, SCORE_POLLEN_WEIGHT, SCORE_JITTER,
+  TEND_TICKS, BROOD_TEND_AMOUNT, BROOD_HONEY_COST, BROOD_BEE_BREAD_COST, PROCESS_TICKS, PROCESSING_RATE,
   NECTAR_TO_HONEY_RATIO, NIGHT_START, DAWN_END,
+  SCOUT_EXPLORE_RANGE, WAGGLE_DANCE_TICKS, POLLEN_STORAGE_CAPACITY,
 } from '../constants';
 
 export function updateBeeAI(bee: BeeEntity, world: World): void {
@@ -37,6 +38,9 @@ export function updateBeeAI(bee: BeeEntity, world: World): void {
     case BeeRole.Nurse:
       updateNurse(bee, world);
       break;
+    case BeeRole.Scout:
+      updateScout(bee, world);
+      break;
     case BeeRole.Builder:
       updateBuilder(bee, world);
       break;
@@ -58,13 +62,11 @@ function updateForager(bee: BeeEntity, world: World): void {
 
     case BeeState.FlyingToFlower: {
       if (bee.path.length === 0) {
-        // Arrived at flower
         const cell = world.grid.get(bee.q, bee.r);
         if (cell && cell.terrain === TerrainType.Flower && cell.nectarAmount > 0.01) {
           bee.state = BeeState.Harvesting;
           bee.stateTimer = HARVEST_TICKS;
         } else {
-          // Flower is depleted, find another
           bee.state = BeeState.Idle;
         }
       }
@@ -74,14 +76,18 @@ function updateForager(bee: BeeEntity, world: World): void {
     case BeeState.Harvesting: {
       bee.stateTimer--;
       if (bee.stateTimer <= 0) {
-        // Harvest nectar
         const cell = world.grid.get(bee.q, bee.r);
         if (cell) {
-          const harvest = Math.min(NECTAR_PER_HARVEST, cell.nectarAmount, BEE_CARRY_CAPACITY - bee.carryingNectar);
-          cell.nectarAmount -= harvest;
-          bee.carryingNectar += harvest;
+          // Harvest nectar
+          const nectarHarvest = Math.min(NECTAR_PER_HARVEST, cell.nectarAmount, BEE_CARRY_CAPACITY - bee.carrying.nectar);
+          cell.nectarAmount -= nectarHarvest;
+          bee.carrying.nectar += nectarHarvest;
+
+          // Harvest pollen alongside
+          const pollenHarvest = Math.min(POLLEN_PER_HARVEST, cell.pollenAmount, BEE_CARRY_CAPACITY - bee.carrying.pollen);
+          cell.pollenAmount -= pollenHarvest;
+          bee.carrying.pollen += pollenHarvest;
         }
-        // Return to hive
         bee.state = BeeState.ReturningToHive;
         bee.path = computePath(bee.q, bee.r, 0, 0, world);
         world.pendingSounds.push('harvest');
@@ -91,7 +97,7 @@ function updateForager(bee: BeeEntity, world: World): void {
 
     case BeeState.ReturningToHive: {
       if (bee.path.length === 0) {
-        if (bee.carryingNectar > 0) {
+        if (bee.carrying.nectar > 0 || bee.carrying.pollen > 0) {
           bee.state = BeeState.Depositing;
           bee.stateTimer = DEPOSIT_TICKS;
         } else {
@@ -104,25 +110,37 @@ function updateForager(bee: BeeEntity, world: World): void {
     case BeeState.Depositing: {
       bee.stateTimer--;
       if (bee.stateTimer <= 0) {
-        // Find a processing cell with capacity
-        const processingCells = world.grid.cellsOfType(TerrainType.Processing);
-        let deposited = false;
-        for (const cell of processingCells) {
-          const space = 3 - cell.nectarStored; // capacity 3
-          if (space > 0) {
-            const amount = Math.min(bee.carryingNectar, space);
-            cell.nectarStored += amount;
-            world.resources.nectar += amount;
-            bee.carryingNectar -= amount;
-            deposited = true;
-            break;
+        // Deposit nectar to processing cells
+        if (bee.carrying.nectar > 0) {
+          const processingCells = world.grid.cellsOfType(TerrainType.Processing);
+          for (const cell of processingCells) {
+            const space = 3 - cell.nectarStored;
+            if (space > 0) {
+              const amount = Math.min(bee.carrying.nectar, space);
+              cell.nectarStored += amount;
+              world.resources.nectar += amount;
+              bee.carrying.nectar -= amount;
+              break;
+            }
           }
+          bee.carrying.nectar = 0;
         }
-        if (!deposited) {
-          // No room — bee keeps carrying nectar and goes idle to retry later
-        } else {
-          bee.carryingNectar = 0;
+
+        // Deposit pollen to pollen storage cells
+        if (bee.carrying.pollen > 0) {
+          const pollenCells = world.grid.cellsOfType(TerrainType.PollenStorage);
+          for (const cell of pollenCells) {
+            const space = POLLEN_STORAGE_CAPACITY - cell.pollenStored;
+            if (space > 0) {
+              const amount = Math.min(bee.carrying.pollen, space);
+              cell.pollenStored += amount;
+              bee.carrying.pollen -= amount;
+              break;
+            }
+          }
+          bee.carrying.pollen = 0;
         }
+
         bee.state = BeeState.Idle;
       }
       break;
@@ -151,11 +169,10 @@ function updateNurse(bee: BeeEntity, world: World): void {
         bee.path = computePath(bee.q, bee.r, procCell.q, procCell.r, world);
         break;
       }
-      // Priority 3: activate empty brood cells if we have honey
+      // Priority 3: activate empty brood cells if we have honey AND bee bread
       const emptyBrood = findEmptyBrood(world);
-      if (emptyBrood && world.resources.honey >= BROOD_HONEY_COST) {
-        // Deduct honey from storage cells (not just global counter)
-        if (world.deductHoney(BROOD_HONEY_COST)) {
+      if (emptyBrood && world.resources.honey >= BROOD_HONEY_COST && world.resources.beeBread >= BROOD_BEE_BREAD_COST) {
+        if (world.deductHoney(BROOD_HONEY_COST) && world.deductBeeBread(BROOD_BEE_BREAD_COST)) {
           emptyBrood.broodActive = true;
           emptyBrood.broodProgress = 0;
         }
@@ -204,14 +221,12 @@ function updateNurse(bee: BeeEntity, world: World): void {
     case BeeState.Processing: {
       bee.stateTimer--;
       if (bee.stateTimer <= 0) {
-        // Nurse speeds up processing
         const cell = world.grid.get(bee.q, bee.r);
         if (cell && cell.nectarStored > 0) {
           const processed = Math.min(PROCESSING_RATE * 5, cell.nectarStored);
           cell.nectarStored -= processed;
           const honeyProduced = processed * NECTAR_TO_HONEY_RATIO;
 
-          // Find storage cell
           const storageCells = world.grid.cellsOfType(TerrainType.HoneyStorage);
           for (const sc of storageCells) {
             const space = 5 - sc.honeyStored;
@@ -231,12 +246,60 @@ function updateNurse(bee: BeeEntity, world: World): void {
   }
 }
 
+function updateScout(bee: BeeEntity, world: World): void {
+  switch (bee.state) {
+    case BeeState.Idle: {
+      const target = findUnexploredTarget(bee, world);
+      if (target) {
+        bee.explorationTarget = target;
+        bee.targetQ = target.q;
+        bee.targetR = target.r;
+        bee.state = BeeState.FlyingToExplore;
+        bee.path = computePath(bee.q, bee.r, target.q, target.r, world);
+      }
+      break;
+    }
+
+    case BeeState.FlyingToExplore: {
+      if (bee.path.length === 0) {
+        bee.state = BeeState.Exploring;
+        bee.stateTimer = 10;
+      }
+      break;
+    }
+
+    case BeeState.Exploring: {
+      bee.stateTimer--;
+      if (bee.stateTimer <= 0) {
+        bee.state = BeeState.ReturningToHive;
+        bee.path = computePath(bee.q, bee.r, 0, 0, world);
+      }
+      break;
+    }
+
+    case BeeState.ReturningToHive: {
+      if (bee.path.length === 0) {
+        bee.state = BeeState.WaggleDancing;
+        bee.danceTicks = WAGGLE_DANCE_TICKS;
+      }
+      break;
+    }
+
+    case BeeState.WaggleDancing: {
+      bee.danceTicks--;
+      if (bee.danceTicks <= 0) {
+        bee.explorationTarget = null;
+        bee.state = BeeState.Idle;
+      }
+      break;
+    }
+  }
+}
+
 function updateBuilder(bee: BeeEntity, world: World): void {
-  // Builder: just idle at hive for now
   if (bee.state === BeeState.Idle) {
     bee.state = BeeState.IdleAtHive;
   }
-  // Stay at hive
   if (bee.state === BeeState.IdleAtHive && (bee.q !== 0 || bee.r !== 0)) {
     bee.path = computePath(bee.q, bee.r, 0, 0, world);
     bee.state = BeeState.ReturningToHive;
@@ -252,12 +315,15 @@ function findBestFlower(bee: BeeEntity, world: World): HexCell | null {
   let bestScore = -Infinity;
 
   for (const f of flowers) {
-    if (f.nectarAmount < 0.01) continue;
+    if (!f.explored) continue;
+    if (f.nectarAmount < 0.01 && f.pollenAmount < 0.01) continue;
     const dist = hexDistance(bee.q, bee.r, f.q, f.r);
-    const nectarRatio = f.nectarAmount / f.nectarMax;
+    const nectarRatio = f.nectarMax > 0 ? f.nectarAmount / f.nectarMax : 0;
+    const pollenRatio = f.pollenMax > 0 ? f.pollenAmount / f.pollenMax : 0;
     const score = SCORE_DISTANCE_WEIGHT * dist
       + SCORE_PHEROMONE_WEIGHT * f.pheromone
       + SCORE_NECTAR_WEIGHT * nectarRatio
+      + SCORE_POLLEN_WEIGHT * pollenRatio
       + SCORE_JITTER * (Math.random() - 0.5);
 
     if (score > bestScore) {
@@ -292,13 +358,42 @@ function findEmptyBrood(world: World): HexCell | null {
   return null;
 }
 
+function findUnexploredTarget(bee: BeeEntity, world: World): { q: number; r: number } | null {
+  let best: { q: number; r: number } | null = null;
+  let bestScore = -Infinity;
+
+  for (const cell of world.grid.cells.values()) {
+    if (cell.explored) continue;
+    const dist = hexDistance(0, 0, cell.q, cell.r);
+    if (dist > SCOUT_EXPLORE_RANGE) continue;
+
+    // Prefer hexes adjacent to explored area (frontier)
+    const neighbors = hexNeighbors(cell.q, cell.r);
+    let nearExplored = false;
+    for (const n of neighbors) {
+      const nc = world.grid.get(n.q, n.r);
+      if (nc && nc.explored) { nearExplored = true; break; }
+    }
+    if (!nearExplored) continue;
+
+    const beeDist = hexDistance(bee.q, bee.r, cell.q, cell.r);
+    const score = -beeDist + Math.random() * 5;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = { q: cell.q, r: cell.r };
+    }
+  }
+  return best;
+}
+
 /** Greedy walk: pick neighbor closest to target each step */
 export function computePath(fromQ: number, fromR: number, toQ: number, toR: number, _world: World): { q: number; r: number }[] {
   const path: { q: number; r: number }[] = [];
   let cq = fromQ;
   let cr = fromR;
 
-  const maxSteps = hexDistance(fromQ, fromR, toQ, toR) + 5; // safety margin
+  const maxSteps = hexDistance(fromQ, fromR, toQ, toR) + 5;
   for (let i = 0; i < maxSteps; i++) {
     if (cq === toQ && cr === toR) break;
 

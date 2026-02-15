@@ -12,7 +12,7 @@ export class AudioManager {
     try {
       this.ctx = new AudioContext();
       this.masterGain = this.ctx.createGain();
-      this.masterGain.gain.value = this.volume;
+      this.masterGain.gain.setValueAtTime(this.volume, this.ctx.currentTime);
       this.masterGain.connect(this.ctx.destination);
       this.initialized = true;
       this.startAmbientBuzz();
@@ -24,6 +24,8 @@ export class AudioManager {
   setVolume(v: number): void {
     this.volume = v;
     if (this.masterGain && this.ctx) {
+      this.masterGain.gain.cancelScheduledValues(this.ctx.currentTime);
+      this.masterGain.gain.setValueAtTime(this.masterGain.gain.value, this.ctx.currentTime);
       this.masterGain.gain.linearRampToValueAtTime(v, this.ctx.currentTime + 0.05);
     }
   }
@@ -41,7 +43,7 @@ export class AudioManager {
     filter.Q.value = 2;
 
     const gain = this.ctx.createGain();
-    gain.gain.value = 0;
+    gain.gain.setValueAtTime(0, this.ctx.currentTime);
 
     osc.connect(filter);
     filter.connect(gain);
@@ -55,7 +57,7 @@ export class AudioManager {
   updateBuzz(visibleBeeCount: number): void {
     if (!this.buzzGain || !this.ctx) return;
     const target = Math.min(0.08, visibleBeeCount * 0.003);
-    this.buzzGain.gain.linearRampToValueAtTime(target, this.ctx.currentTime + 0.1);
+    this.buzzGain.gain.setTargetAtTime(target, this.ctx.currentTime, 0.1);
   }
 
   /** Play event sounds from world queue */
@@ -80,22 +82,24 @@ export class AudioManager {
 
   private playTone(freq: number, duration: number, volume: number, type: OscillatorType): void {
     if (!this.ctx) return;
+    const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     osc.type = type;
     osc.frequency.value = freq;
 
     const gain = this.ctx.createGain();
-    gain.gain.value = volume;
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
     osc.connect(gain);
     gain.connect(this.masterGain!);
-    osc.start();
-    osc.stop(this.ctx.currentTime + duration);
+    osc.start(now);
+    osc.stop(now + duration);
   }
 
   private playNoise(duration: number, volume: number): void {
     if (!this.ctx) return;
+    const now = this.ctx.currentTime;
     const bufferSize = this.ctx.sampleRate * duration;
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
@@ -107,8 +111,8 @@ export class AudioManager {
     source.buffer = buffer;
 
     const gain = this.ctx.createGain();
-    gain.gain.value = volume;
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+    gain.gain.setValueAtTime(volume, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
@@ -117,23 +121,24 @@ export class AudioManager {
     source.connect(filter);
     filter.connect(gain);
     gain.connect(this.masterGain!);
-    source.start();
+    source.start(now);
   }
 
   private playAscendingTone(): void {
     if (!this.ctx) return;
+    const now = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     osc.type = 'sine';
-    osc.frequency.value = 440;
-    osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.2);
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.2);
 
     const gain = this.ctx.createGain();
-    gain.gain.value = 0.06;
-    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
 
     osc.connect(gain);
     gain.connect(this.masterGain!);
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.3);
+    osc.start(now);
+    osc.stop(now + 0.3);
   }
 }

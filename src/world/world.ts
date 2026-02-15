@@ -5,10 +5,11 @@ export class World {
   grid: HexGrid = new HexGrid();
   bees: BeeEntity[] = [];
   nextEntityId = 1;
-  resources: Resources = { honey: 0, nectar: 0, wax: 10 };
+  resources: Resources = { honey: 0, nectar: 0, wax: 10, pollen: 0, beeBread: 0 };
   settings: WorldSettings = {
-    foragerRatio: 0.6,
+    foragerRatio: 0.55,
     nurseRatio: 0.25,
+    scoutRatio: 0.1,
     speedMultiplier: 1,
     paused: false,
   };
@@ -27,6 +28,10 @@ export class World {
   dayProgress = 0.1; // 0-1 cycle, start at morning
   dayCount = 1;
   tickCount = 0;
+
+  // Version counters for minimap cache invalidation
+  terrainVersion = 0;
+  explorationVersion = 0;
 
   // Sound events queue (consumed by audio manager each frame)
   pendingSounds: string[] = [];
@@ -47,6 +52,13 @@ export class World {
       sc.honeyStored -= take;
       remaining -= take;
     }
+    return true;
+  }
+
+  /** Deduct bee bread from global resource. Returns true if enough was available. */
+  deductBeeBread(amount: number): boolean {
+    if (this.resources.beeBread < amount - 0.001) return false;
+    this.resources.beeBread -= amount;
     return true;
   }
 }
