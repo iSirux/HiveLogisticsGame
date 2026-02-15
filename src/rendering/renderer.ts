@@ -3,7 +3,7 @@ import { renderHexGrid } from './hexRenderer';
 import { renderEntities } from './entityRenderer';
 import { World } from '../world/world';
 import { InputMode } from '../types';
-import { hexKey } from '../hex/hex';
+import { hexKey, hexNeighbors } from '../hex/hex';
 
 export class Renderer {
   canvas: HTMLCanvasElement;
@@ -97,14 +97,7 @@ export class Renderer {
     // Other buildings must be adjacent to existing hive cells
     const hive = world.grid.hiveCells();
     for (const cell of hive) {
-      const neighbors = [
-        { q: cell.q + 1, r: cell.r },
-        { q: cell.q + 1, r: cell.r - 1 },
-        { q: cell.q, r: cell.r - 1 },
-        { q: cell.q - 1, r: cell.r },
-        { q: cell.q - 1, r: cell.r + 1 },
-        { q: cell.q, r: cell.r + 1 },
-      ];
+      const neighbors = hexNeighbors(cell.q, cell.r);
       for (const n of neighbors) {
         const nc = world.grid.get(n.q, n.r);
         if (nc && nc.terrain === 'grass') {
@@ -112,6 +105,21 @@ export class Renderer {
         }
       }
     }
+
+    // Honey/pollen storage can also be built adjacent to waystations
+    if (world.inputState.buildType === 'honey_storage' || world.inputState.buildType === 'pollen_storage') {
+      const waystations = world.grid.waystationCells();
+      for (const ws of waystations) {
+        const neighbors = hexNeighbors(ws.q, ws.r);
+        for (const n of neighbors) {
+          const nc = world.grid.get(n.q, n.r);
+          if (nc && nc.terrain === 'grass') {
+            valid.add(hexKey(n.q, n.r));
+          }
+        }
+      }
+    }
+
     return valid;
   }
 }

@@ -256,6 +256,8 @@ export function createBee(world: World, role: BeeRole, q: number, r: number, ran
     targetR: 0,
     explorationTarget: null,
     danceTicks: 0,
+    baseQ: 0,
+    baseR: 0,
     stateTimer: 0,
     energy: 1.0,
     age: randomAge ? Math.floor(Math.random() * 1000) : 0,

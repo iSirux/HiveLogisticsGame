@@ -3,10 +3,10 @@ import { World } from '../world/world';
 import { hexDistance, hexNeighbors } from '../hex/hex';
 import {
   HARVEST_TICKS, DEPOSIT_TICKS, NECTAR_PER_HARVEST, POLLEN_PER_HARVEST, BEE_CARRY_CAPACITY,
-  SCORE_DISTANCE_WEIGHT, SCORE_PHEROMONE_WEIGHT, SCORE_NECTAR_WEIGHT, SCORE_POLLEN_WEIGHT, SCORE_JITTER,
+  SCORE_DISTANCE_WEIGHT, SCORE_PHEROMONE_WEIGHT, SCORE_NECTAR_WEIGHT, SCORE_POLLEN_WEIGHT, SCORE_JITTER, SCORE_WAYSTATION_WEIGHT, SCORE_WAYSTATION_MAX_DIST,
   TEND_TICKS, BROOD_TEND_AMOUNT, BROOD_HONEY_COST, BROOD_BEE_BREAD_COST, PROCESS_TICKS, PROCESSING_RATE,
-  NECTAR_TO_HONEY_RATIO, NIGHT_START, DAWN_END,
-  SCOUT_EXPLORE_RANGE, WAGGLE_DANCE_TICKS, POLLEN_STORAGE_CAPACITY,
+  NECTAR_TO_HONEY_RATIO,
+  SCOUT_EXPLORE_RANGE, SCOUT_WAYSTATION_EXPLORE_RANGE, WAGGLE_DANCE_TICKS, POLLEN_STORAGE_CAPACITY,
   ENERGY_HUNGER_THRESHOLD, ENERGY_RESTORE_PER_TICK, HONEY_PER_EAT_TICK, EAT_TICKS,
   WAYSTATION_NECTAR_CAPACITY, WAYSTATION_POLLEN_CAPACITY,
   HAULER_CARRY_CAPACITY, HAULER_PICKUP_TICKS,
@@ -16,7 +16,7 @@ export function updateBeeAI(bee: BeeEntity, world: World): void {
   // Hunger interrupt (highest priority after death) — all roles
   if (bee.state !== BeeState.Hungry && bee.state !== BeeState.Eating) {
     if (bee.energy < ENERGY_HUNGER_THRESHOLD) {
-      const honeyCell = findHoneyCellWithHoney(world);
+      const honeyCell = findHoneyCellWithHoney(world, bee.q, bee.r);
       if (honeyCell) {
         bee.state = BeeState.Hungry;
         bee.targetQ = honeyCell.q;
@@ -54,27 +54,6 @@ export function updateBeeAI(bee: BeeEntity, world: World): void {
     if (bee.stateTimer <= 0 || bee.energy >= 0.95) {
       bee.state = BeeState.Idle;
     }
-    return;
-  }
-
-  // Night behavior: all bees return to hive and rest
-  const isNight = world.dayProgress >= NIGHT_START || world.dayProgress < DAWN_END;
-
-  if (isNight && bee.state !== BeeState.Resting && bee.state !== BeeState.ReturningToHive && bee.state !== BeeState.Depositing) {
-    if (bee.q === 0 && bee.r === 0) {
-      bee.state = BeeState.Resting;
-      bee.path = [];
-      return;
-    }
-    // Head home
-    bee.state = BeeState.ReturningToHive;
-    bee.path = computePath(bee.q, bee.r, 0, 0, world);
-    return;
-  }
-
-  // Dawn: wake up
-  if (!isNight && bee.state === BeeState.Resting) {
-    bee.state = BeeState.Idle;
     return;
   }
 
@@ -346,6 +325,11 @@ function updateNurse(bee: BeeEntity, world: World): void {
 function updateScout(bee: BeeEntity, world: World): void {
   switch (bee.state) {
     case BeeState.Idle: {
+      // Re-evaluate best base (hive or waystation)
+      const base = findScoutBase(bee, world);
+      bee.baseQ = base.q;
+      bee.baseR = base.r;
+
       const target = findUnexploredTarget(bee, world);
       if (target) {
         bee.explorationTarget = target;
@@ -369,7 +353,7 @@ function updateScout(bee: BeeEntity, world: World): void {
       bee.stateTimer--;
       if (bee.stateTimer <= 0) {
         bee.state = BeeState.ReturningToHive;
-        bee.path = computePath(bee.q, bee.r, 0, 0, world);
+        bee.path = computePath(bee.q, bee.r, bee.baseQ, bee.baseR, world);
       }
       break;
     }
@@ -480,17 +464,26 @@ function updateBuilder(bee: BeeEntity, world: World): void {
   }
 }
 
-function findHoneyCellWithHoney(world: World): HexCell | null {
+function findHoneyCellWithHoney(world: World, beeQ?: number, beeR?: number): HexCell | null {
   const cells = world.grid.cellsOfType(TerrainType.HoneyStorage);
   let best: HexCell | null = null;
-  let bestHoney = 0;
+  let bestDist = Infinity;
   for (const c of cells) {
-    if (c.honeyStored > bestHoney) {
-      bestHoney = c.honeyStored;
-      best = c;
+    if (c.honeyStored <= 0.01) continue;
+    if (beeQ !== undefined && beeR !== undefined) {
+      const dist = hexDistance(beeQ, beeR, c.q, c.r);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = c;
+      }
+    } else {
+      // Fallback: pick the one with the most honey
+      if (c.honeyStored > (best?.honeyStored ?? 0)) {
+        best = c;
+      }
     }
   }
-  return best && bestHoney > 0.01 ? best : null;
+  return best;
 }
 
 function findWaystationWithResources(world: World): HexCell | null {
@@ -509,19 +502,33 @@ function findWaystationWithResources(world: World): HexCell | null {
 
 function findBestFlower(bee: BeeEntity, world: World): HexCell | null {
   const flowers = world.grid.cellsOfType(TerrainType.Flower);
+  const waystations = world.grid.cellsOfType(TerrainType.Waystation);
   let best: HexCell | null = null;
   let bestScore = -Infinity;
 
   for (const f of flowers) {
     if (!f.explored) continue;
     if (f.nectarAmount < 0.01 && f.pollenAmount < 0.01) continue;
-    const dist = hexDistance(bee.q, bee.r, f.q, f.r);
     const nectarRatio = f.nectarMax > 0 ? f.nectarAmount / f.nectarMax : 0;
     const pollenRatio = f.pollenMax > 0 ? f.pollenAmount / f.pollenMax : 0;
+    if (nectarRatio < 0.3 && pollenRatio < 0.3) continue;
+    const dist = hexDistance(bee.q, bee.r, f.q, f.r);
+
+    // Bonus for flowers near waystations (closer = higher bonus, 0-1 range)
+    let wsProximity = 0;
+    for (const ws of waystations) {
+      const wsDist = hexDistance(f.q, f.r, ws.q, ws.r);
+      if (wsDist < SCORE_WAYSTATION_MAX_DIST) {
+        const proximity = 1 - wsDist / SCORE_WAYSTATION_MAX_DIST;
+        if (proximity > wsProximity) wsProximity = proximity;
+      }
+    }
+
     const score = SCORE_DISTANCE_WEIGHT * dist
       + SCORE_PHEROMONE_WEIGHT * f.pheromone
       + SCORE_NECTAR_WEIGHT * nectarRatio
       + SCORE_POLLEN_WEIGHT * pollenRatio
+      + SCORE_WAYSTATION_WEIGHT * wsProximity
       + SCORE_JITTER * (Math.random() - 0.5);
 
     if (score > bestScore) {
@@ -556,14 +563,53 @@ function findEmptyBrood(world: World): HexCell | null {
   return null;
 }
 
+function findScoutBase(bee: BeeEntity, world: World): { q: number; r: number } {
+  const candidates: { q: number; r: number; range: number }[] = [
+    { q: 0, r: 0, range: SCOUT_EXPLORE_RANGE },
+  ];
+
+  const waystations = world.grid.waystationCells();
+  for (const ws of waystations) {
+    candidates.push({ q: ws.q, r: ws.r, range: SCOUT_WAYSTATION_EXPLORE_RANGE });
+  }
+
+  let bestBase = { q: 0, r: 0 };
+  let bestScore = -Infinity;
+
+  for (const cand of candidates) {
+    // Count unexplored frontier hexes within range of this base
+    let frontier = 0;
+    for (const cell of world.grid.cells.values()) {
+      if (cell.explored) continue;
+      if (hexDistance(cand.q, cand.r, cell.q, cell.r) > cand.range) continue;
+      const neighbors = hexNeighbors(cell.q, cell.r);
+      for (const n of neighbors) {
+        const nc = world.grid.get(n.q, n.r);
+        if (nc && nc.explored) { frontier++; break; }
+      }
+    }
+    const travelDist = hexDistance(bee.q, bee.r, cand.q, cand.r);
+    const score = frontier - travelDist * 0.5;
+    if (score > bestScore) {
+      bestScore = score;
+      bestBase = { q: cand.q, r: cand.r };
+    }
+  }
+
+  return bestBase;
+}
+
 function findUnexploredTarget(bee: BeeEntity, world: World): { q: number; r: number } | null {
   let best: { q: number; r: number } | null = null;
   let bestScore = -Infinity;
 
+  const isAtHive = bee.baseQ === 0 && bee.baseR === 0;
+  const range = isAtHive ? SCOUT_EXPLORE_RANGE : SCOUT_WAYSTATION_EXPLORE_RANGE;
+
   for (const cell of world.grid.cells.values()) {
     if (cell.explored) continue;
-    const dist = hexDistance(0, 0, cell.q, cell.r);
-    if (dist > SCOUT_EXPLORE_RANGE) continue;
+    const distFromBase = hexDistance(bee.baseQ, bee.baseR, cell.q, cell.r);
+    if (distFromBase > range) continue;
 
     const neighbors = hexNeighbors(cell.q, cell.r);
     let nearExplored = false;

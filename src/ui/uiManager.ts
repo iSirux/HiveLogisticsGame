@@ -3,15 +3,21 @@ import { InputMode, BeeRole, TerrainType, BuildType, HexCell, BeeEntity, BeeStat
 import { InputHandler } from '../input/inputHandler';
 import { NIGHT_START, DAWN_END, BUILD_COSTS, HONEY_STORAGE_CAPACITY, NECTAR_STORAGE_CAPACITY, POLLEN_STORAGE_CAPACITY, WAYSTATION_NECTAR_CAPACITY, WAYSTATION_POLLEN_CAPACITY } from '../constants';
 import { hexToPixel } from '../hex/hex';
+import { getLatestSave, restoreWorld } from '../storage/saveManager';
 
 export class UIManager {
   private world!: World;
   private inputHandler!: InputHandler;
+  private onSave?: () => void;
+  private onNewGame?: () => void;
 
   // FPS tracking
   private frameCount = 0;
   private fpsLastTime = performance.now();
   private currentFps = 0;
+
+  // Bees panel
+  private beesFilterRole: string = 'all';
 
   init(world: World, inputHandler: InputHandler): void {
     this.world = world;
@@ -22,6 +28,7 @@ export class UIManager {
     this.bindRoleSliders();
     this.bindRoleToggle();
     this.bindDebugPanel();
+    this.bindBeesPanel();
   }
 
   private bindModeButtons(): void {
@@ -191,6 +198,8 @@ export class UIManager {
           targetR: 0,
           explorationTarget: null,
           danceTicks: 0,
+          baseQ: 0,
+          baseR: 0,
           stateTimer: 0,
           energy: 1,
           age: 0,
@@ -209,6 +218,123 @@ export class UIManager {
     document.getElementById('dbg-skip-day')?.addEventListener('click', () => {
       this.world.dayProgress = DAWN_END + 0.01;
       this.world.dayCount++;
+    });
+
+    // Save / Load / New Game
+    document.getElementById('dbg-save')?.addEventListener('click', () => {
+      this.onSave?.();
+    });
+    document.getElementById('dbg-load')?.addEventListener('click', () => {
+      const save = getLatestSave();
+      if (save) {
+        restoreWorld(this.world, save);
+        this.syncSlidersFromWorld();
+      }
+    });
+    document.getElementById('dbg-new-game')?.addEventListener('click', () => {
+      this.onNewGame?.();
+    });
+  }
+
+  /** Let Game register callbacks without circular imports */
+  setGameCallbacks(onSave: () => void, onNewGame: () => void): void {
+    this.onSave = onSave;
+    this.onNewGame = onNewGame;
+  }
+
+  /** Sync role sliders to match world settings (after load) */
+  private syncSlidersFromWorld(): void {
+    const set = (id: string, val: number) => {
+      const el = document.getElementById(id) as HTMLInputElement | null;
+      if (el) el.value = Math.round(val * 100).toString();
+    };
+    set('slider-forager', this.world.settings.foragerRatio);
+    set('slider-nurse', this.world.settings.nurseRatio);
+    set('slider-scout', this.world.settings.scoutRatio);
+    set('slider-hauler', this.world.settings.haulerRatio);
+
+    const setText = (id: string, val: number) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = Math.round(val * 100) + '%';
+    };
+    setText('val-forager', this.world.settings.foragerRatio);
+    setText('val-nurse', this.world.settings.nurseRatio);
+    setText('val-scout', this.world.settings.scoutRatio);
+    setText('val-hauler', this.world.settings.haulerRatio);
+    const builderPct = 1 - this.world.settings.foragerRatio - this.world.settings.nurseRatio - this.world.settings.scoutRatio - this.world.settings.haulerRatio;
+    setText('val-builder', Math.max(0, builderPct));
+  }
+
+  private bindBeesPanel(): void {
+    const panel = document.getElementById('bees-panel');
+    const tab = document.getElementById('bees-tab');
+    const closeBtn = document.getElementById('bees-close');
+    if (!panel || !tab) return;
+
+    tab.addEventListener('click', () => {
+      panel.classList.add('bees-open');
+    });
+    closeBtn?.addEventListener('click', () => {
+      panel.classList.remove('bees-open');
+    });
+
+    // Filter buttons
+    document.querySelectorAll('.bees-filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.beesFilterRole = (btn as HTMLElement).dataset.role || 'all';
+        document.querySelectorAll('.bees-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
+
+  private updateBeesPanel(): void {
+    const panel = document.getElementById('bees-panel');
+    if (!panel || !panel.classList.contains('bees-open')) return;
+
+    const bees = this.world.bees;
+    const filtered = this.beesFilterRole === 'all'
+      ? bees
+      : bees.filter(b => b.role === this.beesFilterRole);
+
+    // Summary
+    const summary = document.getElementById('bees-summary');
+    if (summary) {
+      summary.textContent = `Showing ${filtered.length} of ${bees.length} bees`;
+    }
+
+    // Build list (cap at 100 for performance)
+    const listEl = document.getElementById('bees-list');
+    if (!listEl) return;
+
+    const display = filtered.slice(0, 100);
+    let html = '';
+    for (const bee of display) {
+      const state = bee.state.replace(/_/g, ' ');
+      const energyPct = (bee.energy * 100).toFixed(0);
+      let carry = '';
+      if (bee.carrying.nectar > 0.01) carry += `n:${bee.carrying.nectar.toFixed(1)}`;
+      if (bee.carrying.pollen > 0.01) carry += `${carry ? ' ' : ''}p:${bee.carrying.pollen.toFixed(1)}`;
+      const carrySpan = carry ? ` <span style="color:#c8a03c">${carry}</span>` : '';
+      html += `<div class="bee-row" data-bee-q="${bee.q}" data-bee-r="${bee.r}">`;
+      html += `<span class="bee-id">#${bee.id}</span>`;
+      html += `<span class="bee-role">${bee.role}</span>`;
+      html += `<span class="bee-state">${state}${carrySpan}</span>`;
+      html += `<span class="bee-energy">${energyPct}%</span>`;
+      html += `</div>`;
+    }
+    if (filtered.length > 100) {
+      html += `<div style="color:rgba(240,230,211,0.5); padding:4px; font-size:11px;">...and ${filtered.length - 100} more</div>`;
+    }
+    listEl.innerHTML = html;
+
+    // Click to select bee's hex
+    listEl.querySelectorAll('.bee-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const q = parseInt((row as HTMLElement).dataset.beeQ || '0');
+        const r = parseInt((row as HTMLElement).dataset.beeR || '0');
+        this.world.inputState.selectedHex = { q, r };
+      });
     });
   }
 
@@ -316,6 +442,7 @@ export class UIManager {
     }
 
     this.updateDebugPanel(foragers, nurses, scouts, builders, haulers);
+    this.updateBeesPanel();
     this.updateHoverTooltip();
     this.updateSelectionPanel();
   }

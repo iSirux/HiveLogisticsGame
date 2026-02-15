@@ -1,5 +1,5 @@
 import { World } from '../world/world';
-import { DAY_CYCLE_TICKS, FLOWER_REGROWTH_RATE, FLOWER_POLLEN_REGROWTH_RATE } from '../constants';
+import { DAY_CYCLE_TICKS, FLOWER_REGROWTH_RATE, FLOWER_POLLEN_REGROWTH_RATE, NIGHT_START, DAWN_END } from '../constants';
 import { TerrainType } from '../types';
 
 export function updateDayNight(world: World): void {
@@ -9,7 +9,10 @@ export function updateDayNight(world: World): void {
     world.dayCount++;
   }
 
-  // Flower regrowth (nectar + pollen)
+  // Flower regrowth only during daytime
+  const isNight = world.dayProgress >= NIGHT_START || world.dayProgress < DAWN_END;
+  if (isNight) return;
+
   for (const cell of world.grid.cells.values()) {
     if (cell.terrain === TerrainType.Flower) {
       if (cell.nectarAmount < cell.nectarMax) {

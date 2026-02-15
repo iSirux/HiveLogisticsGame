@@ -102,6 +102,8 @@ export interface BeeEntity {
   // Scout fields
   explorationTarget: AxialCoord | null;
   danceTicks: number;
+  baseQ: number;
+  baseR: number;
   // Timers
   stateTimer: number; // ticks remaining in current state action
   // Energy & lifespan

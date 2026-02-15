@@ -226,7 +226,8 @@
     .role-value { min-width: 32px; text-align: right; }
 
     /* Debug panel */
-    #debug-panel {
+    /* Left panel stack — holds debug + bees tabs */
+    #left-panels {
       position: absolute;
       left: 0;
       top: 50%;
@@ -234,36 +235,41 @@
       z-index: 15;
       pointer-events: auto;
       display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    #debug-panel {
+      display: flex;
       flex-direction: row;
     }
     #debug-tab {
-      writing-mode: vertical-rl;
-      text-orientation: mixed;
       background: rgba(30, 20, 10, 0.85);
       border: 1px solid rgba(200, 160, 60, 0.4);
       border-left: none;
       border-radius: 0 6px 6px 0;
-      padding: 10px 5px;
+      padding: 4px 8px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       color: #c8a03c;
-      letter-spacing: 1px;
+      white-space: nowrap;
     }
     #debug-tab:hover { background: rgba(200, 160, 60, 0.25); }
     #debug-content {
       width: 0;
+      height: 0;
       overflow: hidden;
       background: rgba(30, 20, 10, 0.9);
       border: 1px solid rgba(200, 160, 60, 0.4);
       border-left: none;
       border-radius: 0 6px 6px 0;
-      transition: width 0.2s ease;
+      transition: width 0.2s ease, height 0.2s ease;
       white-space: nowrap;
       font-size: 12px;
       line-height: 1.6;
     }
     #debug-panel.debug-open #debug-content {
       width: 240px;
+      height: auto;
       padding: 10px 12px;
       overflow-y: auto;
       max-height: 80vh;
@@ -318,8 +324,121 @@
       margin: 3px 0;
     }
     .debug-checkbox input { accent-color: #c8a03c; }
+    /* Save indicator */
+    #save-indicator {
+      position: absolute;
+      top: 8px; left: 220px;
+      background: rgba(30, 80, 30, 0.85);
+      border: 1px solid rgba(80, 200, 80, 0.5);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #a0f0a0;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    #save-indicator.visible { opacity: 1; }
+
     @media (max-width: 600px) {
-      #debug-panel { display: none !important; }
+      #left-panels { display: none !important; }
+      #save-indicator { display: none; }
+    }
+
+    /* Bees panel */
+    #bees-panel {
+      display: flex;
+      flex-direction: row;
+    }
+    #bees-tab {
+      background: rgba(30, 20, 10, 0.85);
+      border: 1px solid rgba(200, 160, 60, 0.4);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      padding: 4px 8px;
+      cursor: pointer;
+      font-size: 11px;
+      color: #c8a03c;
+      white-space: nowrap;
+    }
+    #bees-tab:hover { background: rgba(200, 160, 60, 0.25); }
+    #bees-content {
+      width: 0;
+      height: 0;
+      overflow: hidden;
+      background: rgba(30, 20, 10, 0.9);
+      border: 1px solid rgba(200, 160, 60, 0.4);
+      border-left: none;
+      border-radius: 0 6px 6px 0;
+      transition: width 0.2s ease, height 0.2s ease;
+      white-space: nowrap;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    #bees-panel.bees-open #bees-content {
+      width: 280px;
+      height: auto;
+      padding: 10px 12px;
+      overflow-y: auto;
+      max-height: 80vh;
+    }
+    #bees-panel.bees-open #bees-tab { display: none; }
+    #bees-close {
+      background: none;
+      border: none;
+      color: rgba(240, 230, 211, 0.5);
+      cursor: pointer;
+      font-size: 14px;
+      float: right;
+      padding: 0 2px;
+      line-height: 1;
+    }
+    #bees-close:hover { color: #f0e6d3; }
+    #bees-filter-bar {
+      display: flex;
+      gap: 3px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .bees-filter-btn {
+      background: rgba(200, 160, 60, 0.15);
+      border: 1px solid rgba(200, 160, 60, 0.3);
+      color: rgba(240, 230, 211, 0.7);
+      border-radius: 3px;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-size: 10px;
+    }
+    .bees-filter-btn.active {
+      background: rgba(200, 160, 60, 0.4);
+      border-color: rgba(200, 160, 60, 0.7);
+      color: #f0e6d3;
+    }
+    .bees-filter-btn:hover { background: rgba(200, 160, 60, 0.3); }
+    #bees-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .bee-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 2px 4px;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .bee-row:hover { background: rgba(200, 160, 60, 0.15); }
+    .bee-row .bee-id { color: rgba(240, 230, 211, 0.5); min-width: 28px; }
+    .bee-row .bee-role { color: #c8a03c; min-width: 52px; }
+    .bee-row .bee-state { color: rgba(240, 230, 211, 0.8); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .bee-row .bee-energy { color: rgba(240, 230, 211, 0.5); min-width: 32px; text-align: right; }
+    #bees-summary {
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(200, 160, 60, 0.2);
+      color: rgba(240, 230, 211, 0.7);
+      font-size: 11px;
     }
 
     /* Hover tooltip (follows cursor) */
@@ -541,6 +660,8 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="hud">
+      <!-- Left Panel Stack (Debug + Bees) -->
+      <div id="left-panels">
       <!-- Debug Panel -->
       <div id="debug-panel">
         <div id="debug-tab">Debug</div>
@@ -590,8 +711,38 @@
               <button class="debug-btn" id="dbg-skip-day">Skip to Day</button>
             </div>
           </div>
+          <div class="debug-section">
+            <div class="debug-section-title">Save &amp; Load</div>
+            <div>
+              <button class="debug-btn" id="dbg-save">Save</button>
+              <button class="debug-btn" id="dbg-load">Load</button>
+              <button class="debug-btn" id="dbg-new-game">New Game</button>
+            </div>
+          </div>
         </div>
       </div>
+
+      <!-- Bees Panel -->
+      <div id="bees-panel">
+        <div id="bees-tab">Bees</div>
+        <div id="bees-content">
+          <button id="bees-close">&times;</button>
+          <div id="bees-summary"></div>
+          <div id="bees-filter-bar">
+            <button class="bees-filter-btn active" data-role="all">All</button>
+            <button class="bees-filter-btn" data-role="forager">Forager</button>
+            <button class="bees-filter-btn" data-role="nurse">Nurse</button>
+            <button class="bees-filter-btn" data-role="scout">Scout</button>
+            <button class="bees-filter-btn" data-role="hauler">Hauler</button>
+            <button class="bees-filter-btn" data-role="builder">Builder</button>
+          </div>
+          <div id="bees-list"></div>
+        </div>
+      </div>
+      </div><!-- end #left-panels -->
+
+      <!-- Save Indicator -->
+      <div id="save-indicator">Saved</div>
 
       <!-- Speed Controls -->
       <div id="speed-controls">

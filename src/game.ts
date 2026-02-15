@@ -13,6 +13,7 @@ import { updateExploration } from './systems/explorationSystem';
 import { updateLifecycle } from './systems/lifecycleSystem';
 import { Minimap } from './rendering/minimap';
 import { SIM_TICK_MS, MAX_TICKS_PER_FRAME } from './constants';
+import { getLatestSave, restoreWorld, saveToSlot } from './storage/saveManager';
 
 export class Game {
   world: World;
@@ -39,9 +40,18 @@ export class Game {
     this.inputHandler.setValidBuildHexesGetter(() => this.renderer.getValidBuildHexes(this.world));
     this.inputHandler.setFirstClickCallback(() => this.audioManager.init());
     this.uiManager.init(this.world, this.inputHandler);
+    this.uiManager.setGameCallbacks(
+      () => this.save(),
+      () => this.newGame(),
+    );
 
-    // Generate world
-    generateWorld(this.world);
+    // Load latest save or generate fresh world
+    const latestSave = getLatestSave();
+    if (latestSave) {
+      restoreWorld(this.world, latestSave);
+    } else {
+      generateWorld(this.world);
+    }
 
     // Handle resize
     const onResize = () => {
@@ -118,5 +128,32 @@ export class Game {
     updatePheromones(this.world);
     updateDayNight(this.world);
     updateExploration(this.world);
+
+    // Autosave every 300 ticks (~30s at 1x)
+    if (this.world.tickCount % 300 === 0) {
+      saveToSlot(this.world, 'autosave');
+      this.showSaveIndicator();
+    }
+  }
+
+  /** Save to a named slot */
+  save(slotName = 'manual'): void {
+    saveToSlot(this.world, slotName);
+    this.showSaveIndicator();
+  }
+
+  /** Start a fresh game (does not delete old saves) */
+  newGame(): void {
+    this.world = new World();
+    this.inputHandler.setWorld(this.world);
+    this.uiManager.init(this.world, this.inputHandler);
+    generateWorld(this.world);
+  }
+
+  private showSaveIndicator(): void {
+    const el = document.getElementById('save-indicator');
+    if (!el) return;
+    el.classList.add('visible');
+    setTimeout(() => el.classList.remove('visible'), 1500);
   }
 }
