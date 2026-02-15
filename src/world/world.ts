@@ -5,7 +5,7 @@ export class World {
   grid: HexGrid = new HexGrid();
   bees: BeeEntity[] = [];
   nextEntityId = 1;
-  resources: Resources = { honey: 0, nectar: 0, wax: 0 };
+  resources: Resources = { honey: 0, nectar: 0, wax: 10 };
   settings: WorldSettings = {
     foragerRatio: 0.6,
     nurseRatio: 0.25,

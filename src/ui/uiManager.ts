@@ -1,7 +1,7 @@
 import { World } from '../world/world';
 import { InputMode, BeeRole, TerrainType, BuildType } from '../types';
 import { InputHandler } from '../input/inputHandler';
-import { NIGHT_START, DAWN_END, BUILD_COSTS } from '../constants';
+import { NIGHT_START, DAWN_END, BUILD_COSTS, HONEY_STORAGE_CAPACITY, NECTAR_STORAGE_CAPACITY } from '../constants';
 
 export class UIManager {
   private world!: World;
@@ -133,11 +133,16 @@ export class UIManager {
   update(): void {
     if (!this.world) return;
 
-    // Update resource display
-    this.setText('res-honey', this.world.resources.honey.toFixed(1));
-    this.setText('res-nectar', this.world.resources.nectar.toFixed(1));
+    // Update resource display with max capacities
+    const honeyMax = this.world.grid.cellsOfType(TerrainType.HoneyStorage).length * HONEY_STORAGE_CAPACITY;
+    const nectarMax = this.world.grid.cellsOfType(TerrainType.Processing).length * NECTAR_STORAGE_CAPACITY;
+    this.setText('res-honey', `${this.world.resources.honey.toFixed(1)}/${honeyMax}`);
+    this.setText('res-nectar', `${this.world.resources.nectar.toFixed(1)}/${nectarMax}`);
     this.setText('res-wax', this.world.resources.wax.toFixed(1));
-    this.setText('res-bees', this.world.bees.length.toString());
+    const foragers = this.world.bees.filter(b => b.role === BeeRole.Forager).length;
+    const nurses = this.world.bees.filter(b => b.role === BeeRole.Nurse).length;
+    const builders = this.world.bees.filter(b => b.role === BeeRole.Builder).length;
+    this.setText('res-bees', `${this.world.bees.length} (${foragers}F/${nurses}N/${builders}B)`);
 
     // Update time display
     const dp = this.world.dayProgress;

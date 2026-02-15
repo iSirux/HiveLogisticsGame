@@ -8,7 +8,7 @@ export const MAX_TICKS_PER_FRAME = 3;
 
 // === World Generation ===
 export const WORLD_RADIUS = 15;          // hex radius of generated world
-export const FLOWER_CLUSTER_COUNT = 6;
+export const FLOWER_CLUSTER_COUNT = 3;
 export const FLOWER_CLUSTER_RADIUS = 1;  // center + ring-1
 export const FLOWER_MIN_DISTANCE = 4;    // min dist from origin for flower clusters
 export const FLOWER_MAX_DISTANCE = 12;

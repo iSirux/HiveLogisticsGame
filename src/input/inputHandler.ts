@@ -103,6 +103,11 @@ export class InputHandler {
 
       if (input.mode === InputMode.Select) {
         input.selectedHex = { q: hovered.q, r: hovered.r };
+        // Auto-open build menu when selecting a buildable hex
+        const valid = this.getValidBuildHexes();
+        if (valid.has(hexKey(hovered.q, hovered.r))) {
+          this.setMode(InputMode.Build);
+        }
       } else if (input.mode === InputMode.Build) {
         this.tryBuild(hovered.q, hovered.r);
       } else if (input.mode === InputMode.Pheromone) {
